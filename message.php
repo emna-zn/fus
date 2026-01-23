@@ -893,10 +893,6 @@ function getTimeAgo($date) {
                     <i class="fas fa-shopping-bag"></i>
                     <span>Commandes</span>
                 </a>
-                <a href="collection.php" class="nav-item">
-                    <i class="fas fa-layer-group"></i>
-                    <span>Collections</span>
-                </a>
                 <a href="products.php" class="nav-item">
                     <i class="fas fa-box"></i>
                     <span>Produits</span>
@@ -909,7 +905,7 @@ function getTimeAgo($date) {
                     <i class="fas fa-key"></i>
                     <span>Accès</span>
                 </a>
-                <a href="messages.php" class="nav-item active">
+                <a href="message.php" class="nav-item active">
                     <i class="fas fa-envelope"></i>
                     <span>Messages</span>
                     <?php if ($unread_count > 0): ?>
@@ -937,10 +933,6 @@ function getTimeAgo($date) {
                     <i class="fas fa-shopping-bag"></i>
                     <span>Mes commandes</span>
                 </a>
-                <a href="collections.php" class="nav-item">
-                    <i class="fas fa-layer-group"></i>
-                    <span>Collections</span>
-                </a>
             </div>
 
             <div class="nav-section">
@@ -949,7 +941,7 @@ function getTimeAgo($date) {
                     <i class="fas fa-user-cog"></i>
                     <span>Mon profil</span>
                 </a>
-                <a href="messages.php" class="nav-item active">
+                <a href="message.php" class="nav-item active">
                     <i class="fas fa-envelope"></i>
                     <span>Messages</span>
                     <?php if ($unread_count > 0): ?>

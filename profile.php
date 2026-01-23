@@ -780,7 +780,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
                     <i class="fas fa-user-cog"></i>
                     <span>Mon profil</span>
                 </a>
-                <a href="messages.php" class="nav-item">
+                <a href="message.php" class="nav-item">
                     <i class="fas fa-envelope"></i>
                     <span>Messages</span>
                 </a>
