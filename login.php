@@ -1,21 +1,15 @@
 <?php
 session_start();
 require_once 'connexion.php';
-
-// Définir une constante pour le mode debug (à désactiver en production)
-define('DEBUG_MODE', true);
-
 if (isset($_GET['action']) && $_GET['action'] === 'logout') {
     session_destroy();
     header('Location: login.php');
     exit();
 }
-
 $database = new Database();
 $conn = $database->getConnection();
 $error = '';
 $success = '';
-
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
     if (isset($_SESSION['role'])) {
         switch ($_SESSION['role']) {
@@ -36,42 +30,6 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     $email = trim($_POST['email']);
     $password = trim($_POST['password']);
-    
-    // Identifiants de test (en dur pour le développement uniquement)
-    $test_accounts = [
-        'admin' => [
-            'email' => 'nader@gmail.com',
-            'password' => 'nader123',
-            'role' => 'admin'
-        ],
-        'client' => [
-            'email' => 'client@gmail.com',
-            'password' => 'client123',
-            'role' => 'client'
-        ]
-    ];
-    
-    // Vérifier d'abord les comptes de test
-    foreach ($test_accounts as $account) {
-        if ($email === $account['email'] && $password === $account['password']) {
-            $_SESSION['logged_in'] = true;
-            $_SESSION['user_id'] = 0; // ID fictif pour les comptes de test
-            $_SESSION['user_email'] = $account['email'];
-            $_SESSION['role'] = $account['role'];
-            $_SESSION['company_name'] = 'Test Company';
-            $_SESSION['contact_person'] = 'Test User';
-            $_SESSION['country'] = 'Test Country';
-            
-            if ($account['role'] === 'admin') {
-                header('Location: dashboard.php');
-            } else {
-                header('Location: dashboard_client.php');
-            }
-            exit();
-        }
-    }
-    
-    // Si pas de compte test, vérifier dans la base de données
     if (empty($email) || empty($password)) {
         $error = "Veuillez remplir tous les champs";
     } else {
@@ -397,7 +355,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             background: rgba(99, 102, 241, 0.05);
             border: 1px solid rgba(99, 102, 241, 0.1);
             border-radius: 16px;
-            display: <?php echo DEBUG_MODE ? 'block' : 'none'; ?>;
         }
 
         .debug-section p {
@@ -411,42 +368,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             color: var(--accent-indigo);
             margin-bottom: 0.75rem;
             font-size: 0.9rem;
-        }
-
-        .debug-section .account {
-            background: rgba(255, 255, 255, 0.7);
-            padding: 0.75rem;
-            border-radius: 8px;
-            margin-bottom: 0.75rem;
-            border-left: 3px solid var(--accent-indigo);
-        }
-
-        .debug-section .account.admin {
-            border-left-color: #DC2626;
-        }
-
-        .debug-section .account.client {
-            border-left-color: #16A34A;
-        }
-
-        .debug-section .account h6 {
-            font-weight: 600;
-            margin-bottom: 0.25rem;
-            font-size: 0.85rem;
-        }
-
-        .debug-section .account h6.admin {
-            color: #DC2626;
-        }
-
-        .debug-section .account h6.client {
-            color: #16A34A;
-        }
-
-        .debug-section .account .credentials {
-            font-family: monospace;
-            font-size: 0.8rem;
-            color: var(--gray-700);
         }
 
         /* Footer */
@@ -557,27 +478,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                         </div>
                     </form>
                     
-                    <!-- Section Debug - Comptes de test -->
-                    <div class="debug-section">
-                        <div class="title">
-                            <i class="fas fa-vial me-1"></i>Comptes de Test
-                        </div>
-                        <div class="account admin">
-                            <h6 class="admin"><i class="fas fa-user-shield me-1"></i>Administrateur</h6>
-                            <div class="credentials">
-                                Email: <strong>nader@gmail.com</strong><br>
-                                Mot de passe: <strong>nader123</strong>
-                            </div>
-                        </div>
-                        <div class="account client">
-                            <h6 class="client"><i class="fas fa-user me-1"></i>Client</h6>
-                            <div class="credentials">
-                                Email: <strong>client@gmail.com</strong><br>
-                                Mot de passe: <strong>client123</strong>
-                            </div>
-                        </div>
-                    </div>
-                    
                     <div class="footer-text">
                         <p>&copy; 2026 FUS Denim. Premium Manufacturing Solutions.</p>
                     </div>
@@ -626,31 +526,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             passwordInput.parentElement.appendChild(passwordToggle);
         }
 
-        // Auto-fill credentials for testing (Ctrl+Click on labels)
+        // Add animation on load
         document.addEventListener('DOMContentLoaded', function() {
             document.querySelector('.login-container').classList.add('fade-in');
-            
-            // Auto-fill admin credentials when clicking on the admin label
-            const adminLabel = document.querySelector('.debug-section .account.admin');
-            if (adminLabel) {
-                adminLabel.addEventListener('click', function(e) {
-                    if (e.ctrlKey) {
-                        document.getElementById('email').value = 'nader@gmail.com';
-                        document.getElementById('password').value = 'nader123';
-                    }
-                });
-            }
-            
-            // Auto-fill client credentials when clicking on the client label
-            const clientLabel = document.querySelector('.debug-section .account.client');
-            if (clientLabel) {
-                clientLabel.addEventListener('click', function(e) {
-                    if (e.ctrlKey) {
-                        document.getElementById('email').value = 'client@gmail.com';
-                        document.getElementById('password').value = 'client123';
-                    }
-                });
-            }
         });
     </script>
 </body>
