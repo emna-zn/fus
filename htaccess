@@ -1,0 +1,51 @@
+# ============================================
+# Configuration Apache pour FUS Portal
+# Résout l'erreur 405 Request method not allowed
+# ============================================
+
+# Activer le moteur de réécriture
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Permettre toutes les méthodes HTTP (GET, POST, PUT, DELETE)
+    # Ne pas bloquer les requêtes POST
+    RewriteCond %{REQUEST_METHOD} ^(GET|POST|PUT|DELETE)$
+    RewriteRule .* - [L]
+</IfModule>
+
+# Autoriser les requêtes POST
+<Limit GET POST PUT DELETE>
+    Order allow,deny
+    Allow from all
+</Limit>
+
+# Configuration PHP
+<IfModule mod_php.c>
+    php_flag display_errors On
+    php_value max_execution_time 300
+    php_value max_input_time 300
+    php_value post_max_size 20M
+    php_value upload_max_filesize 20M
+</IfModule>
+
+# Désactiver les restrictions sur les méthodes HTTP
+<IfModule mod_headers.c>
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization"
+</IfModule>
+
+# Protection contre les attaques XSS
+<IfModule mod_headers.c>
+    Header set X-XSS-Protection "1; mode=block"
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+</IfModule>
+
+# Désactiver le cache pour les fichiers PHP
+<FilesMatch "\.(php)$">
+    <IfModule mod_headers.c>
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Pragma "no-cache"
+        Header set Expires 0
+    </IfModule>
+</FilesMatch>

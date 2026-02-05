@@ -655,53 +655,99 @@ $stats = $stats_result->fetch_assoc();
             }
         }
 
-        /* Product Card */
-        .product-card {
-            background: var(--white);
-            border-radius: 20px;
-            overflow: hidden;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid var(--gray-100);
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            height: 100%;
-        }
+       /* Product Card - Version corrigée pour images complètes */
+.product-card {
+    background: var(--white);
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--gray-100);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
 
-        .product-card:hover {
-            transform: translateY(-8px);
-            box-shadow: var(--shadow-xl);
-            border-color: var(--accent-1);
-        }
+.product-card:hover {
+    transform: translateY(-8px);
+    box-shadow: var(--shadow-xl);
+    border-color: var(--accent-1);
+}
 
-        .product-image-container {
-            position: relative;
-            height: 200px;
-            overflow: hidden;
-            background: var(--gray-100);
-        }
+.product-image-container {
+    position: relative;
+    height: 200px;
+    min-height: 200px;
+    overflow: visible; /* Changé de hidden à visible */
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    border-bottom: 1px solid var(--gray-100);
+}
 
-        .product-image {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            transition: transform 0.6s;
-        }
+.product-image {
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    max-height: 160px;
+    object-fit: contain; /* C'est la clé pour voir l'image complète */
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 6px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+}
 
-        .product-card:hover .product-image {
-            transform: scale(1.1);
-        }
+.product-card:hover .product-image {
+    transform: scale(1.08);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+}
 
-        .product-status {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            padding: 0.4rem 0.75rem;
-            border-radius: 8px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            backdrop-filter: blur(10px);
-        }
+.image-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+.image-placeholder i {
+    font-size: 3rem;
+    color: var(--gray-400);
+    opacity: 0.6;
+}
+
+.product-status {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    backdrop-filter: blur(10px);
+    z-index: 2;
+}
+
+.status-active {
+    background: rgba(16, 185, 129, 0.9);
+    color: var(--white);
+}
+
+.status-inactive {
+    background: rgba(239, 68, 68, 0.9);
+    color: var(--white);
+}
+
+.product-content {
+    padding: 1.5rem;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+}
 
         .status-active {
             background: rgba(16, 185, 129, 0.9);
@@ -1332,24 +1378,32 @@ $stats = $stats_result->fetch_assoc();
         <div class="products-grid">
             <?php foreach($products as $index => $product): 
                 // Récupérer l'image principale du produit
-                $image_stmt = $conn->prepare("SELECT image_url FROM product_images WHERE product_id = ? AND is_main = 1 LIMIT 1");
+                $image_url = null;
+                $image_stmt = $conn->prepare("SELECT image_url FROM product_images WHERE product_id = ? ORDER BY is_main DESC, id ASC LIMIT 1");
                 $image_stmt->bind_param("i", $product['id']);
                 $image_stmt->execute();
                 $image_result = $image_stmt->get_result();
-                $image = $image_result->fetch_assoc();
+                if ($image_row = $image_result->fetch_assoc()) {
+                    $image_url = $image_row['image_url'];
+                }
                 $image_stmt->close();
             ?>
             <div class="product-card" style="animation-delay: <?php echo ($index * 0.05) + 0.2; ?>s;">
                 <div class="product-image-container">
-                    <?php if ($image && !empty($image['image_url'])): ?>
-                    <img src="<?php echo htmlspecialchars($image['image_url']); ?>" 
-                         alt="<?php echo htmlspecialchars($product['name']); ?>" 
-                         class="product-image">
+                    <?php if ($image_url): ?>
+                        <img src="<?php echo htmlspecialchars($image_url); ?>" 
+                             alt="<?php echo htmlspecialchars($product['name']); ?>" 
+                             class="product-image"
+                             onerror="this.onerror=null; this.style.display='none'; this.parentElement.querySelector('.image-placeholder').style.display='flex';">
+                        <div class="image-placeholder" style="display: none;">
+                            <i class="fas fa-image"></i>
+                        </div>
                     <?php else: ?>
-                    <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
-                        <i class="fas fa-image" style="font-size: 3rem; color: var(--gray-400);"></i>
-                    </div>
+                        <div class="image-placeholder">
+                            <i class="fas fa-image"></i>
+                        </div>
                     <?php endif; ?>
+                    
                     <span class="product-status <?php echo $product['is_active'] ? 'status-active' : 'status-inactive'; ?>">
                         <?php echo $product['is_active'] ? 'Actif' : 'Inactif'; ?>
                     </span>
@@ -1640,6 +1694,17 @@ $stats = $stats_result->fetch_assoc();
         }, { threshold: 0.5 });
 
         document.querySelectorAll('.stat-box').forEach(box => statsObserver.observe(box));
+
+        // Gestion des images qui échouent au chargement
+        document.querySelectorAll('.product-image').forEach(img => {
+            img.addEventListener('error', function() {
+                this.style.display = 'none';
+                const placeholder = this.parentElement.querySelector('.image-placeholder');
+                if (placeholder) {
+                    placeholder.style.display = 'flex';
+                }
+            });
+        });
     </script>
 </body>
 </html>

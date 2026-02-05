@@ -938,8 +938,7 @@ $page_title = "About FUS | Premium Denim Manufacturer";
             <div class="row g-4">
                 <div class="col-lg-4">
                     <div class="team-card fade-in-up">
-                        <img src="" 
-                             alt="CEO" class="team-img">
+                       
                         <div class="team-info">
                             <span class="team-position">CEO & Founder</span>
                             <h4 class="mb-2">Nader Bahraoui</h4>
@@ -950,8 +949,7 @@ $page_title = "About FUS | Premium Denim Manufacturer";
                 
                 <div class="col-lg-4">
                     <div class="team-card fade-in-up" style="transition-delay: 0.1s;">
-                        <img src="" 
-                             alt="Head of Production" class="team-img">
+                        
                         <div class="team-info">
                             <span class="team-position">Partner</span>
                             <h4 class="mb-2">slim tounsi</h4>

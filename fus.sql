@@ -201,48 +201,6 @@ INSERT INTO products (collection_id, reference, name, description, fabric_compos
 
 (8, 'FUS-ML-701', 'Minimalist Straight Jeans', 'Clean design straight leg jeans with hidden rivets and minimal branding.', '99% Cotton, 1% Elastane', '12', 'Dark Indigo,Black,Raw', '28,30,32,34,36', 'Rinse, Unwashed, Soft Wash', 'ISO 9001, Minimalist Design', 90, 45, '/specs/fus-ml-701.pdf', TRUE);
 
--- 4. INSERER LES IMAGES PRODUITS
-INSERT INTO product_images (product_id, image_url, is_main) VALUES
-(1, 'https://images.unsplash.com/photo-1544441893-675973e31985?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE),
-(1, 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', FALSE),
-(1, 'https://images.unsplash.com/photo-1520256862855-398228c41684?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', FALSE),
-(1, 'https://images.unsplash.com/photo-1602293589930-45aad59ba3ab?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', FALSE),
-
-(2, 'https://images.unsplash.com/photo-1551028719-00167b16eac5?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE),
-(2, 'https://images.unsplash.com/photo-1552374196-c4e7ffc6e126?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', FALSE),
-
-(3, 'https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE),
-
-(4, 'https://images.unsplash.com/photo-1520006403909-838d6b92c22e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE),
-(4, 'https://images.unsplash.com/photo-1582418702059-97ebafb35d09?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', FALSE),
-
-(5, 'https://images.unsplash.com/photo-1542272604-787c3835535d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE),
-
-(6, 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE),
-
-(7, 'https://images.unsplash.com/photo-1473966968600-fa801b869a1a?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE),
-
-(8, 'https://images.unsplash.com/photo-1576995853123-5a10305d93c0?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE),
-
-(9, 'https://images.unsplash.com/photo-1543087903-1ac2ec7aa8c5?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE),
-
-(10, 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE),
-
-(11, 'https://images.unsplash.com/photo-1586790170083-2f9ceadc732d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE),
-
-(12, 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE),
-
-(13, 'https://images.unsplash.com/photo-1576871337632-b9aef4c17ab9?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE),
-
-(14, 'https://images.unsplash.com/photo-1565084888279-aca607ecce0c?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE),
-
-(15, 'https://images.unsplash.com/photo-1542272604-787c3835535d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE),
-
-(16, 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE),
-
-(17, 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE),
-
-(18, 'https://images.unsplash.com/photo-1576871337632-b9aef4c17ab9?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', TRUE);
 
 -- 5. INSERER LES COMMANDES (HISTORIQUE)
 INSERT INTO orders (client_id, reference, status, total_items, total_value, notes, shipping_address, estimated_delivery, created_at) VALUES

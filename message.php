@@ -1,105 +1,229 @@
 <?php
+// messages.php - CÔTÉ CLIENT
 session_start();
 require_once 'connexion.php';
 
-if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
+// Vérification de l'authentification
+if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || $_SESSION['role'] !== 'client') {
     header('Location: login.php');
     exit();
 }
 
 $database = new Database();
 $conn = $database->getConnection();
-$user_id = $_SESSION['user_id'];
-$role = $_SESSION['role'];
-$user_email = $_SESSION['user_email'];
-if ($role === 'admin') {
-    $query = "SELECT cm.*, u.company_name, u.contact_person 
-              FROM contact_messages cm 
-              LEFT JOIN users u ON cm.email = u.email 
-              ORDER BY cm.is_read ASC, cm.submitted_at DESC";
-    $result = $conn->query($query);
-} else {
-    $query = "SELECT cm.*, u.company_name, u.contact_person 
-              FROM contact_messages cm 
-              LEFT JOIN users u ON cm.email = u.email 
-              WHERE cm.email = ? 
-              ORDER BY cm.submitted_at DESC";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("s", $user_email);
-    $stmt->execute();
-    $result = $stmt->get_result();
+$client_id = $_SESSION['user_id'];
+$company_name = $_SESSION['company_name'];
+$contact_person = $_SESSION['contact_person'];
+
+// DEBUG: Afficher les infos de session
+error_log("=== DEBUG MESSAGES.PHP ===");
+error_log("Client ID: " . $client_id);
+error_log("Company: " . $company_name);
+error_log("Contact: " . $contact_person);
+
+// Récupérer l'email de l'utilisateur depuis la base de données
+$stmt = $conn->prepare("SELECT email FROM users WHERE id = ?");
+$stmt->bind_param("i", $client_id);
+$stmt->execute();
+$result = $stmt->get_result();
+$user = $result->fetch_assoc();
+$user_email = $user['email'];
+$stmt->close();
+
+error_log("User Email: " . $user_email);
+
+// Variables pour la pagination et le filtrage
+$messages_per_page = 15;
+$current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$offset = ($current_page - 1) * $messages_per_page;
+$filter_type = isset($_GET['type']) ? $_GET['type'] : 'all';
+$search_query = isset($_GET['search']) ? trim($_GET['search']) : '';
+
+// Construire la requête pour récupérer les messages envoyés par ce client
+$query_conditions = "WHERE client_id = ?";
+$query_params = [$client_id];
+$query_types = "i";
+
+if ($filter_type === 'unread') {
+    // Pour le client, "unread" signifie les messages auxquels l'admin n'a pas encore répondu
+    $query_conditions .= " AND admin_replied = 0";
+} elseif ($filter_type === 'read') {
+    $query_conditions .= " AND admin_replied = 1";
 }
 
-if ($role === 'admin') {
-    $unread_count_query = "SELECT COUNT(*) as count FROM contact_messages WHERE is_read = 0";
-    $unread_result = $conn->query($unread_count_query);
-} else {
-    $unread_count_query = "SELECT COUNT(*) as count FROM contact_messages WHERE email = ? AND is_read = 0";
-    $unread_stmt = $conn->prepare($unread_count_query);
-    $unread_stmt->bind_param("s", $user_email);
-    $unread_stmt->execute();
-    $unread_result = $unread_stmt->get_result();
+if (!empty($search_query)) {
+    $query_conditions .= " AND (subject LIKE ? OR message LIKE ?)";
+    $query_params[] = "%$search_query%";
+    $query_params[] = "%$search_query%";
+    $query_types .= "ss";
 }
-$unread_count = $unread_result->fetch_assoc()['count'];
-if (isset($_GET['read']) && is_numeric($_GET['read'])) {
-    $message_id = intval($_GET['read']);
-    if ($role === 'admin') {
-        $mark_query = "UPDATE contact_messages SET is_read = 1 WHERE id = ?";
-        $mark_stmt = $conn->prepare($mark_query);
-        $mark_stmt->bind_param("i", $message_id);
-    } else {
-        $mark_query = "UPDATE contact_messages SET is_read = 1 WHERE id = ? AND email = ?";
-        $mark_stmt = $conn->prepare($mark_query);
-        $mark_stmt->bind_param("is", $message_id, $user_email);
-    }
+
+// Compter le nombre total de messages envoyés par ce client
+$count_sql = "SELECT COUNT(*) as total FROM contact_messages $query_conditions";
+$stmt = $conn->prepare($count_sql);
+$stmt->bind_param($query_types, ...$query_params);
+$stmt->execute();
+$count_result = $stmt->get_result();
+$total_messages = $count_result->fetch_assoc()['total'];
+$total_pages = ceil($total_messages / $messages_per_page);
+$stmt->close();
+
+// Récupérer les messages envoyés par ce client
+$messages_sql = "SELECT * FROM contact_messages 
+                 $query_conditions 
+                 ORDER BY submitted_at DESC 
+                 LIMIT ? OFFSET ?";
+
+$query_params[] = $messages_per_page;
+$query_params[] = $offset;
+$query_types .= "ii";
+
+$stmt = $conn->prepare($messages_sql);
+$stmt->bind_param($query_types, ...$query_params);
+$stmt->execute();
+$messages_result = $stmt->get_result();
+$messages = [];
+while ($row = $messages_result->fetch_assoc()) {
+    // Ces messages sont ceux que le client a envoyés à l'admin
+    $row['message_type'] = 'sent';
+    $row['sender_name'] = 'Vous';
+    $row['sender_info'] = $company_name;
+    $row['recipient'] = 'Administration FUS Denim';
     
-    if ($mark_stmt->execute()) {
-        header('Location: messages.php');
-        exit();
-    }
-    $mark_stmt->close();
+    $messages[] = $row;
 }
+$stmt->close();
+
+// Traitement de l'envoi d'un nouveau message
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_message'])) {
+    $subject = trim($_POST['subject']);
+    $message = trim($_POST['message']);
+    
+    error_log("=== FORM SUBMITTED ===");
+    error_log("Subject: " . $subject);
+    error_log("Message: " . substr($message, 0, 50) . "...");
+    error_log("Client ID: " . $client_id);
+    error_log("Contact Person: " . $contact_person);
+    error_log("Email: " . $user_email);
+    
+    if (!empty($subject) && !empty($message)) {
+        // DEBUG: Afficher la requête SQL
+        error_log("SQL INSERT: INSERT INTO contact_messages (client_id, name, email, subject, message, is_read, submitted_at) VALUES ($client_id, '$contact_person', '$user_email', '$subject', '$message', 0, NOW())");
+        
+        // Vérifier si la table a le champ client_id
+        $check_table = $conn->query("DESCRIBE contact_messages");
+        $fields = [];
+        while($field = $check_table->fetch_assoc()) {
+            $fields[] = $field['Field'];
+            error_log("Field: " . $field['Field'] . " - Type: " . $field['Type']);
+        }
+        
+        // Essayer deux méthodes d'insertion
+        try {
+            // Méthode 1: Avec client_id
+            $insert_stmt = $conn->prepare("INSERT INTO contact_messages 
+                                          (client_id, name, email, subject, message, is_read, submitted_at) 
+                                          VALUES (?, ?, ?, ?, ?, 0, NOW())");
+            
+            if ($insert_stmt === false) {
+                error_log("Prepare failed: " . $conn->error);
+                throw new Exception("Prepare failed: " . $conn->error);
+            }
+            
+            $insert_stmt->bind_param(
+                "issss", 
+                $client_id, 
+                $contact_person, 
+                $user_email, 
+                $subject, 
+                $message
+            );
+            
+            $result = $insert_stmt->execute();
+            
+            if ($result) {
+                error_log("Insert successful! ID: " . $conn->insert_id);
+                $success_message = "Message envoyé à l'administration avec succès!";
+                // Redirection pour éviter le re-soumission
+                header("Location: messages.php?sent=1");
+                exit();
+            } else {
+                error_log("Execute failed: " . $insert_stmt->error);
+                $error_message = "Erreur lors de l'envoi du message. Code: " . $insert_stmt->errno . " - " . $insert_stmt->error;
+                
+                // Essayer méthode 2: Sans client_id (pour compatibilité)
+                error_log("Trying alternative method without client_id...");
+                $insert_stmt2 = $conn->prepare("INSERT INTO contact_messages 
+                                              (name, email, subject, message, is_read, submitted_at) 
+                                              VALUES (?, ?, ?, ?, 0, NOW())");
+                
+                if ($insert_stmt2) {
+                    $insert_stmt2->bind_param(
+                        "ssss", 
+                        $contact_person, 
+                        $user_email, 
+                        $subject, 
+                        $message
+                    );
+                    
+                    if ($insert_stmt2->execute()) {
+                        error_log("Alternative insert successful! ID: " . $conn->insert_id);
+                        $success_message = "Message envoyé à l'administration avec succès!";
+                        header("Location: messages.php?sent=1");
+                        exit();
+                    } else {
+                        error_log("Alternative execute failed: " . $insert_stmt2->error);
+                        $error_message .= "<br>Alternative also failed: " . $insert_stmt2->error;
+                    }
+                    $insert_stmt2->close();
+                }
+            }
+            $insert_stmt->close();
+            
+        } catch (Exception $e) {
+            error_log("Exception: " . $e->getMessage());
+            $error_message = "Exception: " . $e->getMessage();
+        }
+    } else {
+        $error_message = "Veuillez remplir tous les champs obligatoires.";
+    }
+}
+
+// Marquer un message comme lu (quand le client le consulte)
+if (isset($_GET['mark_as_read']) && is_numeric($_GET['mark_as_read'])) {
+    $message_id = (int)$_GET['mark_as_read'];
+    $update_stmt = $conn->prepare("UPDATE contact_messages SET is_read = 1 WHERE id = ? AND client_id = ?");
+    $update_stmt->bind_param("ii", $message_id, $client_id);
+    $update_stmt->execute();
+    $update_stmt->close();
+    
+    header("Location: messages.php#message-$message_id");
+    exit();
+}
+
+// Supprimer un message
 if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
-    $message_id = intval($_GET['delete']);
-    if ($role === 'admin') {
-        $delete_query = "DELETE FROM contact_messages WHERE id = ?";
-        $delete_stmt = $conn->prepare($delete_query);
-        $delete_stmt->bind_param("i", $message_id);
-    } else {
-        $delete_query = "DELETE FROM contact_messages WHERE id = ? AND email = ?";
-        $delete_stmt = $conn->prepare($delete_query);
-        $delete_stmt->bind_param("is", $message_id, $user_email);
-    }
-    
-    if ($delete_stmt->execute()) {
-        header('Location: messages.php');
-        exit();
-    }
+    $message_id = (int)$_GET['delete'];
+    $delete_stmt = $conn->prepare("DELETE FROM contact_messages WHERE id = ? AND client_id = ?");
+    $delete_stmt->bind_param("ii", $message_id, $client_id);
+    $delete_stmt->execute();
     $delete_stmt->close();
-}
-if ($role === 'admin') {
-    $stats_query = "
-        SELECT 
-            COUNT(*) as total,
-            SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) as unread,
-            SUM(CASE WHEN DATE(submitted_at) = CURDATE() THEN 1 ELSE 0 END) as today,
-            SUM(CASE WHEN DATE(submitted_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY) THEN 1 ELSE 0 END) as yesterday
-        FROM contact_messages
-    ";
-    $stats_result = $conn->query($stats_query);
-    $stats = $stats_result->fetch_assoc();
-}
-function getTimeAgo($date) {
-    $now = new DateTime();
-    $messageDate = new DateTime($date);
-    $interval = $now->diff($messageDate);
     
-    if ($interval->y > 0) return "Il y a " . $interval->y . " an" . ($interval->y > 1 ? "s" : "");
-    if ($interval->m > 0) return "Il y a " . $interval->m . " mois";
-    if ($interval->d > 0) return "Il y a " . $interval->d . " jour" . ($interval->d > 1 ? "s" : "");
-    if ($interval->h > 0) return "Il y a " . $interval->h . " heure" . ($interval->h > 1 ? "s" : "");
-    if ($interval->i > 0) return "Il y a " . $interval->i . " min";
-    return "À l'instant";
+    header("Location: messages.php?deleted=1");
+    exit();
+}
+
+// Récupérer le nombre de messages envoyés (pour info)
+$count_stmt = $conn->prepare("SELECT COUNT(*) as total_sent FROM contact_messages WHERE client_id = ?");
+$count_stmt->bind_param("i", $client_id);
+$count_stmt->execute();
+$count_result = $count_stmt->get_result();
+$total_sent = $count_result->fetch_assoc()['total_sent'];
+$count_stmt->close();
+
+// Afficher les erreurs à l'écran pour débogage
+if (isset($error_message)) {
+    error_log("Error message: " . $error_message);
 }
 ?>
 <!DOCTYPE html>
@@ -107,7 +231,7 @@ function getTimeAgo($date) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Messages - FUS Denim</title>
+    <title>Messagerie - FUS Denim</title>
     
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -153,7 +277,6 @@ function getTimeAgo($date) {
             background: linear-gradient(135deg, #F9FAFB 0%, #F3F4F6 100%);
             color: var(--primary);
             line-height: 1.6;
-            overflow-x: hidden;
         }
 
         h1, h2, h3, h4, h5, h6 {
@@ -173,19 +296,6 @@ function getTimeAgo($date) {
             overflow-y: auto;
             box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
             z-index: 1000;
-        }
-
-        .sidebar::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .sidebar::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .sidebar::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 3px;
         }
 
         .logo {
@@ -247,24 +357,6 @@ function getTimeAgo($date) {
             box-shadow: 0 8px 16px rgba(59, 130, 246, 0.3);
         }
 
-        .nav-item i {
-            width: 20px;
-            text-align: center;
-            font-size: 1rem;
-        }
-
-        .nav-badge {
-            margin-left: auto;
-            background: linear-gradient(135deg, var(--accent-3), var(--accent-1));
-            color: var(--white);
-            padding: 0.25rem 0.5rem;
-            border-radius: 6px;
-            font-size: 0.7rem;
-            font-weight: 700;
-            min-width: 20px;
-            text-align: center;
-        }
-
         .sidebar-user {
             position: absolute;
             bottom: 0;
@@ -273,59 +365,6 @@ function getTimeAgo($date) {
             padding: 1.5rem;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
             background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(0, 0, 0, 0.1) 100%);
-        }
-
-        .user-card {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            margin-bottom: 1rem;
-        }
-
-        .user-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 8px;
-            background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1rem;
-            flex-shrink: 0;
-        }
-
-        .user-info small {
-            color: rgba(255, 255, 255, 0.6);
-            display: block;
-            font-size: 0.75rem;
-        }
-
-        .user-info strong {
-            color: var(--white);
-            font-size: 0.9rem;
-        }
-
-        .logout-btn {
-            width: 100%;
-            padding: 0.75rem;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            background: transparent;
-            color: var(--white);
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-size: 0.85rem;
-            font-weight: 600;
-            text-decoration: none;
-            display: block;
-            text-align: center;
-        }
-
-        .logout-btn:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(255, 255, 255, 0.3);
-            color: var(--white);
-            text-decoration: none;
         }
 
         /* Main Content */
@@ -339,7 +378,7 @@ function getTimeAgo($date) {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 2rem;
+            margin-bottom: 2.5rem;
         }
 
         .header-title h1 {
@@ -354,517 +393,280 @@ function getTimeAgo($date) {
             font-size: 0.9rem;
         }
 
-        .header-actions {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-        }
-
-        .time-display {
-            padding: 0.75rem 1.5rem;
-            background: var(--white);
-            border-radius: 10px;
-            font-weight: 600;
-            color: var(--accent-1);
-            box-shadow: var(--shadow-sm);
-        }
-
         .btn-primary {
             background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
             border: none;
-            padding: 0.875rem 1.5rem;
+            padding: 0.875rem 2rem;
             border-radius: 8px;
             font-weight: 600;
             font-size: 0.95rem;
-            transition: all 0.3s ease;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.2);
-        }
-
-        .btn-outline-secondary {
-            border: 1px solid var(--gray-300);
-            color: var(--gray-600);
-            padding: 0.875rem 1.5rem;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 0.95rem;
-        }
-
-        /* Stats Grid */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-
-        .stat-box {
-            background: var(--white);
-            border-radius: 16px;
-            padding: 1.5rem;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid var(--gray-100);
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .stat-box::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
-        }
-
-        .stat-box:nth-child(2)::before {
-            background: linear-gradient(90deg, var(--accent-5), var(--accent-3));
-        }
-
-        .stat-box:nth-child(3)::before {
-            background: linear-gradient(90deg, var(--accent-2), var(--accent-3));
-        }
-
-        .stat-box:nth-child(4)::before {
-            background: linear-gradient(90deg, var(--accent-4), var(--accent-1));
-        }
-
-        .stat-box:hover {
-            transform: translateY(-4px);
-            box-shadow: var(--shadow-lg);
-        }
-
-        .stat-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 1rem;
-        }
-
-        .stat-label {
-            color: var(--gray-500);
-            font-size: 0.85rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .stat-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.25rem;
-        }
-
-        .stat-box:nth-child(1) .stat-icon {
-            background: rgba(59, 130, 246, 0.1);
-            color: var(--accent-1);
-        }
-
-        .stat-box:nth-child(2) .stat-icon {
-            background: rgba(245, 158, 11, 0.1);
-            color: var(--accent-5);
-        }
-
-        .stat-box:nth-child(3) .stat-icon {
-            background: rgba(139, 92, 246, 0.1);
-            color: var(--accent-2);
-        }
-
-        .stat-box:nth-child(4) .stat-icon {
-            background: rgba(16, 185, 129, 0.1);
-            color: var(--accent-4);
-        }
-
-        .stat-value {
-            font-size: 2rem;
-            font-weight: 800;
-            color: var(--primary);
-            line-height: 1;
-            margin-bottom: 0.25rem;
-        }
-
-        .stat-trend {
-            font-size: 0.85rem;
-            color: var(--accent-4);
-            font-weight: 600;
         }
 
         /* Messages Container */
         .messages-container {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 2rem;
+            height: calc(100vh - 180px);
+        }
+
+        @media (max-width: 1200px) {
+            .messages-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Message List */
+        .message-list-panel {
             background: var(--white);
             border-radius: 16px;
-            padding: 0;
             box-shadow: var(--shadow-sm);
             border: 1px solid var(--gray-100);
-            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
 
-        .messages-header {
+        .message-list-header {
             padding: 1.5rem;
             border-bottom: 1px solid var(--gray-100);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            background: var(--gray-50);
         }
 
-        .messages-title {
-            font-size: 1.25rem;
+        .stats-box {
+            background: var(--white);
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            border: 1px solid var(--gray-200);
+        }
+
+        .stats-number {
+            font-size: 1.5rem;
             font-weight: 700;
-            color: var(--primary);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .messages-title i {
             color: var(--accent-1);
         }
 
-        .messages-actions {
-            display: flex;
-            gap: 0.75rem;
+        .stats-label {
+            font-size: 0.8rem;
+            color: var(--gray-500);
         }
 
-        .btn-action {
-            padding: 0.5rem 1rem;
+        .message-filters {
+            padding: 1rem 1.5rem;
             background: var(--gray-50);
+            border-bottom: 1px solid var(--gray-100);
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            padding: 0.5rem 1rem;
+            background: var(--white);
             border: 1px solid var(--gray-200);
             border-radius: 8px;
-            color: var(--gray-600);
-            text-decoration: none;
+            cursor: pointer;
             font-size: 0.85rem;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
         }
 
-        .btn-action:hover {
-            background: var(--gray-100);
-            color: var(--primary);
-            text-decoration: none;
-        }
-
-        .btn-action.active {
+        .filter-btn.active {
             background: var(--accent-1);
             color: white;
             border-color: var(--accent-1);
         }
 
-        /* Messages List */
-        .messages-list {
-            max-height: 600px;
+        .search-box {
+            margin-top: 1rem;
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 0.75rem 1rem 0.75rem 2.5rem;
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+        }
+
+        .search-box i {
+            position: absolute;
+            left: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--gray-400);
+        }
+
+        .message-list {
+            flex: 1;
             overflow-y: auto;
+            padding: 0;
         }
 
         .message-item {
-            padding: 1.5rem;
+            padding: 1.25rem 1.5rem;
             border-bottom: 1px solid var(--gray-100);
-            transition: all 0.3s ease;
-            display: flex;
-            gap: 1rem;
-            align-items: flex-start;
-        }
-
-        .message-item:last-child {
-            border-bottom: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
         }
 
         .message-item:hover {
             background: var(--gray-50);
         }
 
-        .message-item.unread {
-            background: rgba(59, 130, 246, 0.05);
-            border-left: 4px solid var(--accent-1);
-        }
-
-        .message-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 10px;
-            background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 1rem;
-            flex-shrink: 0;
-        }
-
-        .message-content {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .message-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 0.5rem;
+        .message-item.active {
+            background: var(--gray-50);
+            border-left: 3px solid var(--accent-1);
         }
 
         .message-sender {
-            font-weight: 700;
+            font-weight: 600;
             color: var(--primary);
-            font-size: 0.95rem;
         }
 
-        .message-company {
+        .message-date {
+            font-size: 0.8rem;
             color: var(--gray-500);
-            font-size: 0.85rem;
-            margin-top: 0.25rem;
-        }
-
-        .message-time {
-            color: var(--gray-500);
-            font-size: 0.85rem;
-            white-space: nowrap;
-            margin-left: 1rem;
         }
 
         .message-subject {
             font-weight: 600;
-            color: var(--primary);
-            margin-bottom: 0.5rem;
-            font-size: 0.95rem;
+            color: var(--gray-700);
+            margin: 0.5rem 0;
         }
 
         .message-preview {
             color: var(--gray-600);
-            font-size: 0.9rem;
-            line-height: 1.5;
-            margin-bottom: 0.75rem;
+            font-size: 0.85rem;
+            line-height: 1.4;
+            overflow: hidden;
+            text-overflow: ellipsis;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
-            overflow: hidden;
         }
 
-        .message-actions {
-            display: flex;
-            gap: 0.75rem;
-        }
-
-        .btn-message-action {
-            padding: 0.25rem 0.75rem;
-            background: var(--gray-100);
-            border: 1px solid var(--gray-200);
-            border-radius: 6px;
-            color: var(--gray-600);
-            font-size: 0.8rem;
+        .status-badge {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
             font-weight: 600;
-            transition: all 0.3s ease;
-            cursor: pointer;
-            text-decoration: none;
+            margin-top: 0.5rem;
         }
 
-        .btn-message-action:hover {
-            background: var(--gray-200);
-            color: var(--primary);
-            text-decoration: none;
+        .status-pending {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--accent-5);
         }
 
-        .btn-message-action.read:hover {
-            background: var(--accent-1);
-            color: white;
-            border-color: var(--accent-1);
+        .status-read {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--accent-4);
         }
 
-        .btn-message-action.delete:hover {
-            background: #EF4444;
-            color: white;
-            border-color: #EF4444;
-        }
-
-        /* Empty State */
-        .empty-state {
-            padding: 3rem 2rem;
-            text-align: center;
-            color: var(--gray-400);
-        }
-
-        .empty-state i {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            opacity: 0.5;
-        }
-
-        .empty-state h4 {
-            color: var(--gray-600);
-            margin-bottom: 0.5rem;
-        }
-
-        .empty-state p {
-            color: var(--gray-500);
-            margin-bottom: 1.5rem;
-        }
-
-        /* Modal de message */
-        .message-modal-content {
+        /* Message View */
+        .message-view-panel {
+            background: var(--white);
             border-radius: 16px;
-            border: none;
-            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--gray-100);
+            display: flex;
+            flex-direction: column;
         }
 
-        .modal-header {
-            background: var(--primary);
-            color: white;
-            border-bottom: none;
+        .message-view-header {
             padding: 1.5rem;
+            border-bottom: 1px solid var(--gray-100);
         }
 
-        .modal-body {
-            padding: 1.5rem;
-            max-height: 400px;
+        .message-content {
+            flex: 1;
+            padding: 2rem;
             overflow-y: auto;
         }
 
-        .message-full-content {
-            color: var(--gray-700);
-            line-height: 1.6;
-            white-space: pre-wrap;
+        .message-meta {
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--gray-100);
         }
 
-        /* New Message Form */
-        .new-message-form {
+        .message-body {
+            font-size: 1rem;
+            line-height: 1.7;
+            color: var(--gray-700);
+            white-space: pre-wrap;
+            background: var(--gray-50);
+            padding: 1.5rem;
+            border-radius: 8px;
+            border-left: 4px solid var(--accent-1);
+        }
+
+        /* Modal */
+        .compose-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .compose-modal.active {
+            display: flex;
+        }
+
+        .compose-form {
             background: var(--white);
             border-radius: 16px;
-            padding: 2rem;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid var(--gray-100);
-            margin-top: 2rem;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
         }
 
-        .form-label {
-            font-weight: 600;
-            color: var(--gray-700);
-            margin-bottom: 0.5rem;
-            font-size: 0.9rem;
-        }
-
-        .form-control, .form-select {
-            border-radius: 8px;
-            border: 1px solid var(--gray-300);
-            padding: 0.75rem 1rem;
-            font-size: 0.95rem;
-            transition: all 0.3s ease;
-        }
-
-        .form-control:focus, .form-select:focus {
-            border-color: var(--accent-1);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-
-        .form-text {
-            font-size: 0.85rem;
-            color: var(--gray-500);
-            margin-top: 0.25rem;
-        }
-
-        /* Footer */
-        .footer {
-            margin-top: 3rem;
-            padding-top: 2rem;
-            border-top: 1px solid var(--gray-200);
-            color: var(--gray-500);
-            font-size: 0.9rem;
+        /* Pagination */
+        .pagination {
             display: flex;
-            justify-content: space-between;
+            justify-content: center;
             align-items: center;
+            gap: 0.5rem;
+            padding: 1.5rem;
+            border-top: 1px solid var(--gray-100);
         }
 
         /* Responsive */
-        @media (max-width: 1200px) {
-            .sidebar {
-                width: 260px;
-            }
-
-            .main-content {
-                margin-left: 260px;
-                padding: 1.5rem;
-            }
-        }
-
         @media (max-width: 768px) {
             .sidebar {
-                width: 240px;
-                position: fixed;
+                width: 70px;
             }
-
+            
+            .sidebar .logo h2,
+            .sidebar .nav-label,
+            .sidebar .nav-item span,
+            .sidebar-user .user-info {
+                display: none;
+            }
+            
             .main-content {
-                margin-left: 240px;
+                margin-left: 70px;
                 padding: 1rem;
             }
-
+            
             .header {
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 1rem;
             }
-
-            .header-actions {
-                width: 100%;
-            }
-
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-
-            .message-header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 0.5rem;
-            }
-
-            .message-time {
-                margin-left: 0;
-            }
-
-            .messages-actions {
-                flex-wrap: wrap;
-            }
-        }
-
-        @media (max-width: 640px) {
-            .sidebar {
-                width: 200px;
-            }
-
-            .main-content {
-                margin-left: 200px;
-                padding: 0.75rem;
-            }
-
-            .header-title h1 {
-                font-size: 1.5rem;
-            }
-
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .message-item {
-                flex-direction: column;
-                gap: 0.75rem;
-            }
-
-            .message-avatar {
-                align-self: flex-start;
-            }
-
-            .footer {
-                flex-direction: column;
+            
+            .messages-container {
+                height: auto;
                 gap: 1rem;
             }
         }
@@ -873,95 +675,55 @@ function getTimeAgo($date) {
 <body>
     <!-- Sidebar -->
     <div class="sidebar">
-        <?php if ($role === 'admin'): ?>
-            <div class="logo">
-                <i class="fas fa-bolt"></i>
-                <h2>FUS Admin</h2>
-            </div>
+        <div class="logo">
+            <i class="fas fa-gem"></i>
+            <h2>FUS Client</h2>
+        </div>
 
-            <div class="nav-section">
-                <div class="nav-label">Menu Principal</div>
-                <a href="dashboard.php" class="nav-item">
-                    <i class="fas fa-chart-line"></i>
-                    <span>Tableau de bord</span>
-                </a>
-                <a href="clients.php" class="nav-item">
-                    <i class="fas fa-users"></i>
-                    <span>Clients</span>
-                </a>
-                <a href="order.php" class="nav-item">
-                    <i class="fas fa-shopping-bag"></i>
-                    <span>Commandes</span>
-                </a>
-                <a href="products.php" class="nav-item">
-                    <i class="fas fa-box"></i>
-                    <span>Produits</span>
-                </a>
-            </div>
+        <div class="nav-section">
+            <div class="nav-label">Menu Principal</div>
+            <a href="dashboard_client.php" class="nav-item">
+                <i class="fas fa-chart-line"></i>
+                <span>Tableau de bord</span>
+            </a>
+            <a href="catalog_prv.php" class="nav-item">
+                <i class="fas fa-tshirt"></i>
+                <span>Catalogue produits</span>
+            </a>
+            <a href="orders.php" class="nav-item">
+                <i class="fas fa-shopping-bag"></i>
+                <span>Mes commandes</span>
+            </a>
+            <a href="messages.php" class="nav-item active">
+                <i class="fas fa-envelope"></i>
+                <span>Messages</span>
+            </a>
+        </div>
 
-            <div class="nav-section">
-                <div class="nav-label">Gestion</div>
-                <a href="access_requests.php" class="nav-item">
-                    <i class="fas fa-key"></i>
-                    <span>Accès</span>
-                </a>
-                <a href="message.php" class="nav-item active">
-                    <i class="fas fa-envelope"></i>
-                    <span>Messages</span>
-                    <?php if ($unread_count > 0): ?>
-                    <span class="nav-badge"><?php echo $unread_count; ?></span>
-                    <?php endif; ?>
-                </a>
-            </div>
-        <?php else: ?>
-            <div class="logo">
-                <i class="fas fa-gem"></i>
-                <h2>FUS Client</h2>
-            </div>
-
-            <div class="nav-section">
-                <div class="nav-label">Menu Principal</div>
-                <a href="dashboard_client.php" class="nav-item">
-                    <i class="fas fa-chart-line"></i>
-                    <span>Tableau de bord</span>
-                </a>
-                <a href="catalog.php" class="nav-item">
-                    <i class="fas fa-tshirt"></i>
-                    <span>Catalogue produits</span>
-                </a>
-                <a href="orders.php" class="nav-item">
-                    <i class="fas fa-shopping-bag"></i>
-                    <span>Mes commandes</span>
-                </a>
-            </div>
-
-            <div class="nav-section">
-                <div class="nav-label">Compte</div>
-                <a href="profile.php" class="nav-item">
-                    <i class="fas fa-user-cog"></i>
-                    <span>Mon profil</span>
-                </a>
-                <a href="message.php" class="nav-item active">
-                    <i class="fas fa-envelope"></i>
-                    <span>Messages</span>
-                    <?php if ($unread_count > 0): ?>
-                    <span class="nav-badge"><?php echo $unread_count; ?></span>
-                    <?php endif; ?>
-                </a>
-            </div>
-        <?php endif; ?>
+        <div class="nav-section">
+            <div class="nav-label">Compte</div>
+            <a href="profile.php" class="nav-item">
+                <i class="fas fa-user-cog"></i>
+                <span>Mon profil</span>
+            </a>
+        </div>
 
         <div class="sidebar-user">
-            <div class="user-card">
-                <div class="user-avatar">
-                    <i class="fas fa-user"></i>
-                </div>
-                <div class="user-info">
-                    <small>Connecté</small>
-                    <strong><?php echo htmlspecialchars(substr($_SESSION['user_email'], 0, 20)); ?></strong>
-                </div>
+            <div style="margin-bottom: 1rem;">
+                <small style="color: rgba(255, 255, 255, 0.6); display: block;">Société</small>
+                <strong style="color: var(--white);"><?php echo htmlspecialchars($company_name); ?></strong>
             </div>
-            <a href="login.php?action=logout" class="logout-btn">
+            <a href="login.php?action=logout" style="
+                width: 100%;
+                padding: 0.75rem;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                background: transparent;
+                color: var(--white);
+                border-radius: 8px;
+                text-decoration: none;
+                display: block;
+                text-align: center;
+            ">
                 <i class="fas fa-sign-out-alt me-2"></i> Déconnexion
             </a>
         </div>
@@ -972,461 +734,322 @@ function getTimeAgo($date) {
         <!-- Header -->
         <div class="header">
             <div class="header-title">
-                <h1>Messages</h1>
-                <p><?php echo $role === 'admin' ? 'Gestion des messages clients' : 'Vos messages avec FUS Denim'; ?></p>
+                <h1>Messagerie</h1>
+                <p>Envoyez des messages à l'administration FUS Denim</p>
             </div>
-            <div class="header-actions">
-                <div class="time-display">
-                    <i class="fas fa-clock me-2"></i><?php echo date('d/m/Y • H:i'); ?>
-                </div>
-                <?php if ($role === 'admin'): ?>
-                    <a href="dashboard.php" class="btn btn-outline-secondary">
-                        <i class="fas fa-arrow-left me-2"></i>Retour
-                    </a>
-                <?php else: ?>
-                    <a href="dashboard_client.php" class="btn btn-outline-secondary">
-                        <i class="fas fa-arrow-left me-2"></i>Retour
-                    </a>
-                <?php endif; ?>
+            <div>
+                <button class="btn btn-primary" onclick="openComposeModal()">
+                    <i class="fas fa-plus me-2"></i>Nouveau message
+                </button>
             </div>
         </div>
-
-        <!-- Stats Grid (Admin seulement) -->
-        <?php if ($role === 'admin'): ?>
-        <div class="stats-grid">
-            <div class="stat-box">
-                <div class="stat-header">
-                    <div class="stat-label">Total Messages</div>
-                    <div class="stat-icon">
-                        <i class="fas fa-envelope"></i>
-                    </div>
-                </div>
-                <div class="stat-value"><?php echo $stats['total'] ?? 0; ?></div>
-                <div class="stat-trend">Tous les messages</div>
-            </div>
-
-            <div class="stat-box">
-                <div class="stat-header">
-                    <div class="stat-label">Non lus</div>
-                    <div class="stat-icon">
-                        <i class="fas fa-envelope-open"></i>
-                    </div>
-                </div>
-                <div class="stat-value"><?php echo $stats['unread'] ?? 0; ?></div>
-                <div class="stat-trend">À traiter</div>
-            </div>
-
-            <div class="stat-box">
-                <div class="stat-header">
-                    <div class="stat-label">Aujourd'hui</div>
-                    <div class="stat-icon">
-                        <i class="fas fa-calendar-day"></i>
-                    </div>
-                </div>
-                <div class="stat-value"><?php echo $stats['today'] ?? 0; ?></div>
-                <div class="stat-trend">Nouveaux messages</div>
-            </div>
-
-            <div class="stat-box">
-                <div class="stat-header">
-                    <div class="stat-label">Hier</div>
-                    <div class="stat-icon">
-                        <i class="fas fa-calendar-minus"></i>
-                    </div>
-                </div>
-                <div class="stat-value"><?php echo $stats['yesterday'] ?? 0; ?></div>
-                <div class="stat-trend">Messages reçus</div>
-            </div>
-        </div>
-        <?php endif; ?>
 
         <!-- Messages Container -->
         <div class="messages-container">
-            <div class="messages-header">
-                <div class="messages-title">
-                    <i class="fas fa-inbox"></i>
-                    Boîte de réception
+            <!-- Left Panel - Message List -->
+            <div class="message-list-panel">
+                <div class="message-list-header">
+                    <div class="stats-box">
+                        <div class="stats-number"><?php echo $total_sent; ?></div>
+                        <div class="stats-label">Messages envoyés</div>
+                    </div>
                 </div>
-                <div class="messages-actions">
-                    <?php if ($role === 'client'): ?>
-                    <a href="contact.php" class="btn-action">
-                        <i class="fas fa-plus"></i> Nouveau message
-                    </a>
+
+                <div class="message-filters">
+                    <div class="filter-buttons">
+                        <button class="filter-btn <?php echo $filter_type === 'all' ? 'active' : ''; ?>" 
+                                onclick="setFilter('all')">Tous</button>
+                        <button class="filter-btn <?php echo $filter_type === 'unread' ? 'active' : ''; ?>" 
+                                onclick="setFilter('unread')">En attente</button>
+                        <button class="filter-btn <?php echo $filter_type === 'read' ? 'active' : ''; ?>" 
+                                onclick="setFilter('read')">Lus</button>
+                    </div>
+
+                    <div class="search-box">
+                        <form method="GET" action="messages.php" onsubmit="return handleSearch()">
+                            <input type="hidden" name="type" value="<?php echo $filter_type; ?>">
+                            <i class="fas fa-search"></i>
+                            <input type="text" 
+                                   name="search" 
+                                   id="searchInput"
+                                   placeholder="Rechercher..."
+                                   value="<?php echo htmlspecialchars($search_query); ?>">
+                        </form>
+                    </div>
+                </div>
+
+                <div class="message-list">
+                    <?php if (empty($messages)): ?>
+                        <div style="padding: 3rem 1rem; text-align: center; color: var(--gray-400);">
+                            <i class="fas fa-envelope-open" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+                            <p>Vous n'avez pas encore envoyé de messages</p>
+                            <button class="btn btn-primary mt-3" onclick="openComposeModal()">
+                                <i class="fas fa-plus me-2"></i>Écrire un message
+                            </button>
+                        </div>
                     <?php else: ?>
-                    <button type="button" class="btn-action" onclick="showNewMessageForm()">
-                        <i class="fas fa-plus"></i> Nouveau message
+                        <?php foreach ($messages as $message): ?>
+                            <div class="message-item <?php echo isset($_GET['view']) && $_GET['view'] == $message['id'] ? 'active' : ''; ?>" 
+                                 onclick="viewMessage(<?php echo $message['id']; ?>)">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                    <div>
+                                        <div class="message-subject">
+                                            <?php echo htmlspecialchars($message['subject'] ?: '(Sans objet)'); ?>
+                                        </div>
+                                        <div class="message-preview">
+                                            <?php echo htmlspecialchars(substr($message['message'], 0, 100)); ?>...
+                                        </div>
+                                    </div>
+                                    <div class="message-date">
+                                        <?php echo date('d/m/Y', strtotime($message['submitted_at'])); ?>
+                                    </div>
+                                </div>
+                                <div>
+                                    <span class="status-badge status-<?php echo $message['admin_replied'] ? 'read' : 'pending'; ?>">
+                                        <?php echo $message['admin_replied'] ? 'Répondu par admin' : 'En attente'; ?>
+                                    </span>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+
+                <?php if ($total_pages > 1): ?>
+                <div class="pagination">
+                    <button class="btn btn-sm btn-outline-primary" 
+                            onclick="changePage(<?php echo max(1, $current_page - 1); ?>)" 
+                            <?php echo $current_page <= 1 ? 'disabled' : ''; ?>>
+                        <i class="fas fa-chevron-left"></i>
                     </button>
-                    <?php endif; ?>
-                    <?php if ($role === 'admin'): ?>
-                    <a href="export_messages.php" class="btn-action">
-                        <i class="fas fa-download"></i> Exporter
-                    </a>
-                    <?php endif; ?>
-                    <button type="button" class="btn-action" onclick="refreshMessages()">
-                        <i class="fas fa-sync-alt"></i> Actualiser
+                    
+                    <span style="padding: 0 1rem;">
+                        Page <?php echo $current_page; ?> sur <?php echo $total_pages; ?>
+                    </span>
+                    
+                    <button class="btn btn-sm btn-outline-primary" 
+                            onclick="changePage(<?php echo min($total_pages, $current_page + 1); ?>)" 
+                            <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>>
+                        <i class="fas fa-chevron-right"></i>
                     </button>
                 </div>
+                <?php endif; ?>
             </div>
 
-            <div class="messages-list" id="messagesList">
-                <?php if ($result->num_rows > 0): ?>
-                    <?php while ($message = $result->fetch_assoc()): 
-                        $is_unread = !$message['is_read'];
-                        $time_ago = getTimeAgo($message['submitted_at']);
-                        $sender_name = $message['name'] ? htmlspecialchars($message['name']) : 'Anonyme';
-                        $company_name = $message['company_name'] ? htmlspecialchars($message['company_name']) : '';
-                    ?>
-                        <div class="message-item <?php echo $is_unread ? 'unread' : ''; ?>" 
-                             data-message-id="<?php echo $message['id']; ?>">
-                            <div class="message-avatar">
-                                <i class="fas fa-user"></i>
-                            </div>
-                            <div class="message-content">
-                                <div class="message-header">
-                                    <div>
-                                        <div class="message-sender"><?php echo $sender_name; ?></div>
-                                        <?php if ($company_name): ?>
-                                        <div class="message-company"><?php echo $company_name; ?></div>
-                                        <?php endif; ?>
-                                    </div>
-                                    <div class="message-time"><?php echo $time_ago; ?></div>
-                                </div>
-                                
-                                <div class="message-subject">
-                                    <?php echo htmlspecialchars($message['subject']); ?>
-                                </div>
-                                
-                                <div class="message-preview">
-                                    <?php echo htmlspecialchars(substr($message['message'], 0, 150)); ?>...
-                                </div>
-                                
-                                <div class="message-actions">
-                                    <button type="button" class="btn-message-action view" 
-                                            onclick="viewMessage(<?php echo $message['id']; ?>)">
-                                        <i class="fas fa-eye me-1"></i> Voir
+            <!-- Right Panel - Message View -->
+            <div class="message-view-panel">
+                <?php if (isset($_GET['view']) && is_numeric($_GET['view'])): 
+                    $view_id = (int)$_GET['view'];
+                    $view_message = null;
+                    
+                    foreach ($messages as $msg) {
+                        if ($msg['id'] == $view_id) {
+                            $view_message = $msg;
+                            break;
+                        }
+                    }
+                    
+                    if ($view_message): ?>
+                        <div class="message-view-header">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <h3 style="margin: 0;"><?php echo htmlspecialchars($view_message['subject']); ?></h3>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteMessage(<?php echo $view_message['id']; ?>)">
+                                        <i class="fas fa-trash"></i>
                                     </button>
-                                    
-                                    <?php if ($is_unread): ?>
-                                    <a href="?read=<?php echo $message['id']; ?>" 
-                                       class="btn-message-action read">
-                                        <i class="fas fa-check me-1"></i> Marquer comme lu
-                                    </a>
-                                    <?php endif; ?>
-                                    
-                                    <button type="button" class="btn-message-action delete" 
-                                            onclick="deleteMessage(<?php echo $message['id']; ?>)">
-                                        <i class="fas fa-trash me-1"></i> Supprimer
-                                    </button>
-                                    
-                                    <?php if ($role === 'admin' && $message['email']): ?>
-                                    <a href="mailto:<?php echo htmlspecialchars($message['email']); ?>" 
-                                       class="btn-message-action">
-                                        <i class="fas fa-reply me-1"></i> Répondre
-                                    </a>
-                                    <?php endif; ?>
                                 </div>
                             </div>
                         </div>
-                    <?php endwhile; ?>
+                        
+                        <div class="message-content">
+                            <div class="message-meta">
+                                <div>
+                                    <h4>Message à : Administration FUS Denim</h4>
+                                    <p style="color: var(--gray-500); margin: 0.5rem 0;">
+                                        Envoyé par : <strong><?php echo htmlspecialchars($contact_person); ?></strong> 
+                                        (<?php echo htmlspecialchars($company_name); ?>)
+                                    </p>
+                                    <small style="color: var(--gray-400);">
+                                        <i class="fas fa-clock me-1"></i> 
+                                        <?php echo date('d/m/Y à H:i', strtotime($view_message['submitted_at'])); ?>
+                                    </small>
+                                    <div style="margin-top: 0.5rem;">
+                                        <span class="status-badge status-<?php echo $view_message['admin_replied'] ? 'read' : 'pending'; ?>">
+                                            <?php echo $view_message['admin_replied'] ? 'Répondu par l\'administration' : 'En attente de réponse'; ?>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="message-body">
+                                <?php echo nl2br(htmlspecialchars($view_message['message'])); ?>
+                            </div>
+                            
+                            <?php if ($view_message['admin_replied'] && !empty($view_message['reply_message'])): ?>
+                            <div style="margin-top: 2rem; padding: 1.5rem; background: rgba(16, 185, 129, 0.1); border-radius: 8px; border-left: 4px solid var(--accent-4);">
+                                <h5 style="color: var(--accent-4); margin-bottom: 1rem;">
+                                    <i class="fas fa-reply me-2"></i>Réponse de l'administration
+                                </h5>
+                                <div style="background: white; padding: 1rem; border-radius: 6px; margin-bottom: 1rem;">
+                                    <?php echo nl2br(htmlspecialchars($view_message['reply_message'])); ?>
+                                </div>
+                                <?php if ($view_message['replied_at']): ?>
+                                <p style="color: var(--gray-500); margin: 0; font-size: 0.9rem;">
+                                    <i class="fas fa-clock me-1"></i>
+                                    Répondu le <?php echo date('d/m/Y à H:i', strtotime($view_message['replied_at'])); ?>
+                                </p>
+                                <?php endif; ?>
+                            </div>
+                            <?php elseif (!$view_message['admin_replied']): ?>
+                            <div style="margin-top: 2rem; padding: 1rem; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border-left: 4px solid var(--accent-5);">
+                                <p style="margin: 0; color: var(--accent-5);">
+                                    <i class="fas fa-clock me-2"></i>
+                                    En attente d'une réponse de l'administration.
+                                </p>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php else: ?>
+                        <div style="padding: 3rem; text-align: center;">
+                            <i class="fas fa-exclamation-circle" style="font-size: 3rem; color: var(--gray-400); margin-bottom: 1rem;"></i>
+                            <p>Message non trouvé</p>
+                            <button class="btn btn-primary mt-2" onclick="window.location.href='messages.php'">
+                                Retour à la liste
+                            </button>
+                        </div>
+                    <?php endif; ?>
                 <?php else: ?>
-                    <div class="empty-state">
-                        <i class="fas fa-envelope-open"></i>
-                        <h4>Aucun message</h4>
-                        <p><?php echo $role === 'admin' ? 'Aucun message pour le moment.' : 'Vous n\'avez pas encore de messages.'; ?></p>
-                        <?php if ($role === 'client'): ?>
-                        <a href="contact.php" class="btn btn-primary">
-                            <i class="fas fa-plus me-2"></i>Écrire un message
-                        </a>
-                        <?php else: ?>
-                        <button type="button" class="btn btn-primary" onclick="showNewMessageForm()">
-                            <i class="fas fa-plus me-2"></i>Écrire un message
+                    <div style="padding: 3rem; text-align: center;">
+                        <i class="fas fa-envelope-open-text" style="font-size: 3rem; color: var(--gray-400); margin-bottom: 1rem;"></i>
+                        <p>Sélectionnez un message pour le consulter</p>
+                        <p class="small mt-2">Ou envoyez un nouveau message à l'administration</p>
+                        <button class="btn btn-primary mt-3" onclick="openComposeModal()">
+                            <i class="fas fa-plus me-2"></i>Nouveau message
                         </button>
-                        <?php endif; ?>
                     </div>
                 <?php endif; ?>
             </div>
         </div>
 
-        <!-- New Message Form (Admin seulement - Hidden by default) -->
-        <?php if ($role === 'admin'): ?>
-        <div class="new-message-form" id="newMessageForm" style="display: none;">
-            <h3 class="section-title mb-4">
-                <i class="fas fa-pen"></i> Nouveau message
-            </h3>
-            
-            <form id="messageForm" action="send_message.php" method="POST">
-                <div class="mb-3">
-                    <label for="recipient" class="form-label">Destinataire</label>
-                    <select class="form-select" id="recipient" name="recipient" required>
-                        <option value="">Sélectionner un client...</option>
-                        <?php
-                        $clients_query = "SELECT id, company_name, contact_person, email FROM users WHERE role = 'client' AND is_active = 1 ORDER BY company_name";
-                        $clients_result = $conn->query($clients_query);
-                        while ($client = $clients_result->fetch_assoc()):
-                        ?>
-                        <option value="<?php echo $client['id']; ?>">
-                            <?php echo htmlspecialchars($client['company_name'] . ' - ' . $client['contact_person']); ?>
-                        </option>
-                        <?php endwhile; ?>
-                    </select>
-                </div>
-                
-                <div class="mb-3">
-                    <label for="subject" class="form-label">Sujet *</label>
-                    <input type="text" class="form-control" id="subject" name="subject" required 
-                           placeholder="Sujet de votre message">
-                </div>
-                
-                <div class="mb-3">
-                    <label for="message" class="form-label">Message *</label>
-                    <textarea class="form-control" id="message" name="message" rows="6" required 
-                              placeholder="Écrivez votre message ici..."></textarea>
-                </div>
-                
-                <div class="d-flex justify-content-between">
-                    <button type="button" class="btn btn-outline-secondary" onclick="hideNewMessageForm()">
-                        <i class="fas fa-times me-2"></i>Annuler
-                    </button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-paper-plane me-2"></i>Envoyer
-                    </button>
-                </div>
-            </form>
-        </div>
-        <?php endif; ?>
-
-        <!-- Footer -->
-        <div class="footer">
-            <div>
-                <i class="fas fa-<?php echo $role === 'admin' ? 'bolt' : 'gem'; ?>" style="color: var(--accent-1);"></i>
-                <strong>FUS Denim</strong> - Messagerie
-            </div>
-            <div>
-                <span class="system-status">
-                    <i class="fas fa-circle"></i> <?php echo $result->num_rows; ?> message<?php echo $result->num_rows > 1 ? 's' : ''; ?>
-                </span>
-            </div>
-        </div>
-    </div>
-
-    <!-- Message Modal -->
-    <div class="modal fade" id="messageModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content message-modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="modalSubject"></h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-4">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div>
-                                <strong id="modalSender"></strong>
-                                <div class="text-muted small" id="modalCompany"></div>
-                            </div>
-                            <div class="text-muted small" id="modalTime"></div>
-                        </div>
-                        <div class="text-muted small mb-3" id="modalEmail"></div>
+        <!-- Compose Message Modal -->
+        <div class="compose-modal" id="composeModal">
+            <div class="compose-form">
+                <div class="message-view-header">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3 style="margin: 0;">Nouveau message</h3>
+                        <button onclick="closeComposeModal()" style="background: none; border: none; font-size: 1.5rem; color: var(--gray-500);">&times;</button>
                     </div>
-                    <div class="message-full-content" id="modalMessage"></div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-2"></i>Fermer
-                    </button>
-                    <?php if ($role === 'admin'): ?>
-                    <button type="button" class="btn btn-primary" id="replyButton">
-                        <i class="fas fa-reply me-2"></i>Répondre
-                    </button>
-                    <?php endif; ?>
+                
+                <div style="padding: 2rem;">
+                    <form method="POST" action="messages.php">
+                        <div class="mb-3">
+                            <label class="form-label">De</label>
+                            <input type="text" class="form-control" value="<?php echo htmlspecialchars($contact_person . ' - ' . $company_name); ?>" disabled>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">À</label>
+                            <input type="text" class="form-control" value="Administration FUS Denim" disabled>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Objet *</label>
+                            <input type="text" name="subject" class="form-control" placeholder="Sujet de votre message" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Message *</label>
+                            <textarea name="message" class="form-control" rows="8" placeholder="Tapez votre message ici..." required></textarea>
+                            <small class="form-text text-muted">
+                                Votre message sera envoyé à l'équipe d'administration FUS Denim.
+                            </small>
+                        </div>
+                        
+                        <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 2rem;">
+                            <button type="button" class="btn btn-secondary" onclick="closeComposeModal()">Annuler</button>
+                            <button type="submit" name="send_message" class="btn btn-primary">
+                                <i class="fas fa-paper-plane me-2"></i>Envoyer à l'administration
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Afficher/masquer le formulaire de nouveau message (admin seulement)
-        function showNewMessageForm() {
-            document.getElementById('newMessageForm').style.display = 'block';
-            document.getElementById('newMessageForm').scrollIntoView({ behavior: 'smooth' });
-        }
-
-        function hideNewMessageForm() {
-            document.getElementById('newMessageForm').style.display = 'none';
-            document.getElementById('messageForm').reset();
-        }
-
-        // Voir un message en détail
+        // Gestion des messages
         function viewMessage(messageId) {
-            // Charger les détails du message
-            fetch('get_message.php?id=' + messageId)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        // Remplir la modal
-                        document.getElementById('modalSubject').textContent = data.message.subject;
-                        document.getElementById('modalSender').textContent = data.message.name || 'Anonyme';
-                        document.getElementById('modalCompany').textContent = data.message.company_name || '';
-                        document.getElementById('modalEmail').textContent = data.message.email ? `📧 ${data.message.email}` : '';
-                        document.getElementById('modalTime').textContent = getTimeAgo(new Date(data.message.submitted_at));
-                        document.getElementById('modalMessage').textContent = data.message.message;
-
-                        // Configurer le bouton de réponse
-                        if (data.message.email) {
-                            document.getElementById('replyButton').onclick = function() {
-                                window.location.href = 'mailto:' + data.message.email + 
-                                    '?subject=RE: ' + encodeURIComponent(data.message.subject);
-                            };
-                        }
-
-                        // Afficher la modal
-                        const modal = new bootstrap.Modal(document.getElementById('messageModal'));
-                        modal.show();
-                        
-                        // Marquer comme lu après visualisation
-                        markAsRead(messageId);
-                    }
-                });
+            const params = new URLSearchParams(window.location.search);
+            params.set('view', messageId);
+            window.location.href = `messages.php?${params.toString()}`;
         }
 
-        // Marquer un message comme lu
-        function markAsRead(messageId) {
-            fetch('mark_as_read.php?id=' + messageId)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        // Mettre à jour l'interface
-                        const messageItem = document.querySelector(`[data-message-id="${messageId}"]`);
-                        if (messageItem) {
-                            messageItem.classList.remove('unread');
-                            // Mettre à jour le badge
-                            updateUnreadBadge();
-                        }
-                    }
-                });
+        function setFilter(filterType) {
+            const params = new URLSearchParams(window.location.search);
+            params.set('type', filterType);
+            params.delete('view');
+            params.delete('page');
+            window.location.href = `messages.php?${params.toString()}`;
         }
 
-        // Mettre à jour le badge des messages non lus
-        function updateUnreadBadge() {
-            fetch('get_unread_count.php')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const badge = document.querySelector('.nav-badge');
-                        if (badge) {
-                            if (data.unread_count > 0) {
-                                badge.textContent = data.unread_count;
-                            } else {
-                                badge.remove();
-                            }
-                        } else if (data.unread_count > 0) {
-                            // Créer le badge s'il n'existe pas
-                            const navItem = document.querySelector('.nav-item.active');
-                            if (navItem) {
-                                const newBadge = document.createElement('span');
-                                newBadge.className = 'nav-badge';
-                                newBadge.textContent = data.unread_count;
-                                navItem.appendChild(newBadge);
-                            }
-                        }
-                    }
-                });
+        function handleSearch() {
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput.value.trim() === '') {
+                return false;
+            }
+            return true;
+        }
+
+        function clearSearch() {
+            const params = new URLSearchParams(window.location.search);
+            params.delete('search');
+            window.location.href = `messages.php?${params.toString()}`;
+        }
+
+        function changePage(page) {
+            const params = new URLSearchParams(window.location.search);
+            params.set('page', page);
+            window.location.href = `messages.php?${params.toString()}`;
+        }
+
+        // Gestion de la modale
+        function openComposeModal() {
+            document.getElementById('composeModal').classList.add('active');
+        }
+
+        function closeComposeModal() {
+            document.getElementById('composeModal').classList.remove('active');
         }
 
         // Supprimer un message
         function deleteMessage(messageId) {
             if (confirm('Êtes-vous sûr de vouloir supprimer ce message ?')) {
-                window.location.href = '?delete=' + messageId;
+                window.location.href = `messages.php?delete=${messageId}`;
             }
         }
 
-        // Actualiser les messages
-        function refreshMessages() {
-            window.location.reload();
-        }
-
-        // Fonction pour calculer le temps écoulé
-        function getTimeAgo(date) {
-            const now = new Date();
-            const messageDate = new Date(date);
-            const diffMs = now - messageDate;
-            const diffMins = Math.floor(diffMs / 60000);
-            const diffHours = Math.floor(diffMs / 3600000);
-            const diffDays = Math.floor(diffMs / 86400000);
-
-            if (diffMins < 1) return 'À l\'instant';
-            if (diffMins < 60) return `Il y a ${diffMins} min`;
-            if (diffHours < 24) return `Il y a ${diffHours} h`;
-            if (diffDays < 7) return `Il y a ${diffDays} j`;
-            
-            return messageDate.toLocaleDateString('fr-FR');
-        }
-
-        // Mise à jour de l'heure en temps réel
-        const updateTime = () => {
-            const now = new Date();
-            const timeDisplay = document.querySelector('.time-display');
-            if (timeDisplay) {
-                const hours = String(now.getHours()).padStart(2, '0');
-                const minutes = String(now.getMinutes()).padStart(2, '0');
-                const day = String(now.getDate()).padStart(2, '0');
-                const month = String(now.getMonth() + 1).padStart(2, '0');
-                const year = now.getFullYear();
-                timeDisplay.innerHTML = `<i class="fas fa-clock me-2"></i>${day}/${month}/${year} • ${hours}:${minutes}`;
-            }
-        };
-
-        setInterval(updateTime, 1000);
-        updateTime();
-
-        // Validation du formulaire de message
-        document.addEventListener('DOMContentLoaded', function() {
-            const messageForm = document.getElementById('messageForm');
-            if (messageForm) {
-                messageForm.addEventListener('submit', function(e) {
-                    const subject = document.getElementById('subject')?.value.trim();
-                    const message = document.getElementById('message')?.value.trim();
-                    
-                    if (!subject || !message) {
-                        e.preventDefault();
-                        alert('Veuillez remplir tous les champs obligatoires.');
-                        return;
-                    }
-                    
-                    if (message.length < 10) {
-                        e.preventDefault();
-                        alert('Le message doit contenir au moins 10 caractères.');
-                        return;
-                    }
-                    
-                    if (!confirm('Êtes-vous sûr de vouloir envoyer ce message ?')) {
-                        e.preventDefault();
-                    }
-                });
-            }
-        });
-
-        // Raccourcis clavier
+        // Fermer la modale avec Escape
         document.addEventListener('keydown', function(e) {
-            // N pour nouveau message (admin seulement)
-            if (e.key === 'n' && e.ctrlKey && <?php echo $role === 'admin' ? 'true' : 'false'; ?>) {
-                e.preventDefault();
-                showNewMessageForm();
-            }
-            // R pour actualiser
-            if (e.key === 'r' && e.ctrlKey) {
-                e.preventDefault();
-                refreshMessages();
-            }
-            // Échap pour fermer le formulaire
             if (e.key === 'Escape') {
-                const form = document.getElementById('newMessageForm');
-                if (form && form.style.display === 'block') {
-                    hideNewMessageForm();
-                }
+                closeComposeModal();
             }
         });
+
+        // Notifications
+        <?php if (isset($_GET['sent']) && $_GET['sent'] == 1): ?>
+            alert('Message envoyé à l\'administration avec succès!');
+            const params = new URLSearchParams(window.location.search);
+            params.delete('sent');
+            window.history.replaceState({}, '', `messages.php?${params.toString()}`);
+        <?php endif; ?>
+
+        <?php if (isset($_GET['deleted']) && $_GET['deleted'] == 1): ?>
+            alert('Message supprimé avec succès!');
+            const params = new URLSearchParams(window.location.search);
+            params.delete('deleted');
+            window.history.replaceState({}, '', `messages.php?${params.toString()}`);
+        <?php endif; ?>
     </script>
 </body>
 </html>

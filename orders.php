@@ -7,11 +7,18 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || $_SESSI
     exit();
 }
 
+// Gérer l'action "new" pour la nouvelle commande
+if (isset($_GET['action']) && $_GET['action'] === 'new') {
+    header('Location: new_order.php');
+    exit();
+}
+
 $database = new Database();
 $conn = $database->getConnection();
 $client_id = $_SESSION['user_id'];
 $status_filter = $_GET['status'] ?? 'all';
 $search_filter = $_GET['search'] ?? '';
+
 $query = "SELECT o.*, 
           (SELECT COUNT(*) FROM order_items WHERE order_id = o.id) as item_count
           FROM orders o 
@@ -41,6 +48,7 @@ $stmt->bind_param($types, ...$params);
 $stmt->execute();
 $orders_result = $stmt->get_result();
 $orders_count = $orders_result->num_rows;
+
 $stats_query = $conn->prepare("
     SELECT 
         SUM(CASE WHEN status = 'received' THEN 1 ELSE 0 END) as received,
@@ -55,6 +63,11 @@ $stats_query = $conn->prepare("
 $stats_query->bind_param("i", $client_id);
 $stats_query->execute();
 $stats = $stats_query->get_result()->fetch_assoc();
+
+// Vérifier si les variables de session existent
+if (!isset($_SESSION['company_name'])) {
+    $_SESSION['company_name'] = '';
+}
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -63,13 +76,8 @@ $stats = $stats_query->get_result()->fetch_assoc();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mes Commandes - FUS Denim</title>
     
-    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    
-    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
     
     <style>
@@ -115,7 +123,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
             font-weight: 700;
         }
 
-        /* Sidebar Navigation */
         .sidebar {
             position: fixed;
             left: 0;
@@ -270,7 +277,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
             text-decoration: none;
         }
 
-        /* Main Content */
         .main-content {
             margin-left: 280px;
             padding: 2rem;
@@ -341,7 +347,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
             box-shadow: 0 10px 20px rgba(16, 185, 129, 0.2);
         }
 
-        /* Stats Grid */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -414,7 +419,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
             letter-spacing: 0.5px;
         }
 
-        /* Filter Card */
         .filter-card {
             background: var(--white);
             border-radius: 16px;
@@ -444,7 +448,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
-        /* Orders Grid */
         .orders-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
@@ -640,7 +643,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
             text-decoration: none;
         }
 
-        /* Empty State */
         .empty-state {
             background: var(--white);
             border-radius: 16px;
@@ -667,7 +669,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
             margin-bottom: 1.5rem;
         }
 
-        /* Status Guide */
         .status-guide {
             background: var(--white);
             border-radius: 16px;
@@ -723,7 +724,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
             color: var(--accent-5);
         }
 
-        /* Export Actions */
         .export-actions {
             display: flex;
             gap: 1rem;
@@ -752,7 +752,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
             text-decoration: none;
         }
 
-        /* Footer */
         .footer {
             margin-top: 3rem;
             padding-top: 2rem;
@@ -764,7 +763,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
             align-items: center;
         }
 
-        /* Responsive */
         @media (max-width: 1200px) {
             .sidebar {
                 width: 260px;
@@ -854,7 +852,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
     </style>
 </head>
 <body>
-    <!-- Sidebar -->
     <div class="sidebar">
         <div class="logo">
             <i class="fas fa-gem"></i>
@@ -875,7 +872,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
                 <i class="fas fa-shopping-bag"></i>
                 <span>Mes commandes</span>
             </a>
-            
         </div>
 
         <div class="nav-section">
@@ -906,9 +902,7 @@ $stats = $stats_query->get_result()->fetch_assoc();
         </div>
     </div>
 
-    <!-- Main Content -->
     <div class="main-content">
-        <!-- Header -->
         <div class="header">
             <div class="header-title">
                 <h1>Mes commandes</h1>
@@ -918,13 +912,12 @@ $stats = $stats_query->get_result()->fetch_assoc();
                 <div class="time-display">
                     <i class="fas fa-clock me-2"></i><?php echo date('d/m/Y • H:i'); ?>
                 </div>
-                <a href="orders.php?action=new" class="btn btn-success">
+                <a href="new_order.php" class="btn btn-success">
                     <i class="fas fa-plus me-2"></i>Nouvelle commande
                 </a>
             </div>
         </div>
 
-        <!-- Stats Grid -->
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-value"><?php echo $stats['total'] ?? 0; ?></div>
@@ -952,7 +945,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
             </div>
         </div>
 
-        <!-- Filter Card -->
         <div class="filter-card">
             <form method="GET" action="" class="row g-3">
                 <div class="col-md-4">
@@ -980,7 +972,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
             </form>
         </div>
 
-        <!-- Orders List -->
         <?php if ($orders_count > 0): ?>
             <?php $orders_result->data_seek(0); ?>
             <div class="orders-grid">
@@ -1070,7 +1061,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
                 <?php endwhile; ?>
             </div>
 
-            <!-- Export Actions -->
             <div class="export-actions">
                 <a href="export_orders.php" class="btn-export">
                     <i class="fas fa-download"></i> Exporter en Excel
@@ -1091,10 +1081,10 @@ $stats = $stats_query->get_result()->fetch_assoc();
                     <?php endif; ?>
                 </p>
                 <div class="d-flex justify-content-center gap-3 flex-wrap">
-                    <a href="catalog.php" class="btn btn-primary">
+                    <a href="catalog_prv.php" class="btn btn-primary">
                         <i class="fas fa-tshirt me-2"></i>Explorer le catalogue
                     </a>
-                    <a href="orders.php?action=new" class="btn btn-outline-primary">
+                    <a href="new_order.php" class="btn btn-outline-primary">
                         <i class="fas fa-plus me-2"></i>Créer une commande
                     </a>
                     <?php if ($status_filter !== 'all' || $search_filter): ?>
@@ -1106,7 +1096,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
             </div>
         <?php endif; ?>
 
-        <!-- Status Guide -->
         <div class="status-guide">
             <h3 class="guide-title">
                 <i class="fas fa-info-circle"></i> Guide des statuts
@@ -1151,7 +1140,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
             </div>
         </div>
 
-        <!-- Footer -->
         <div class="footer">
             <div>
                 <i class="fas fa-gem" style="color: var(--accent-1);"></i>
@@ -1167,38 +1155,27 @@ $stats = $stats_query->get_result()->fetch_assoc();
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Fonction pour annuler une commande
         function cancelOrder(orderId) {
             if (confirm('Êtes-vous sûr de vouloir annuler cette commande ? Cette action est irréversible.')) {
-                // Simulation d'annulation
-                fetch('cancel_order.php?id=' + orderId)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            showNotification('Commande annulée avec succès !', 'success');
-                            setTimeout(() => location.reload(), 1500);
-                        } else {
-                            showNotification('Erreur : ' + data.message, 'danger');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        showNotification('Une erreur est survenue lors de l\'annulation de la commande.', 'danger');
-                    });
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = 'process_cancel_order.php';
+                
+                const orderIdInput = document.createElement('input');
+                orderIdInput.type = 'hidden';
+                orderIdInput.name = 'order_id';
+                orderIdInput.value = orderId;
+                
+                form.appendChild(orderIdInput);
+                document.body.appendChild(form);
+                form.submit();
             }
         }
         
-        // Fonction pour suivre une commande
         function trackOrder(orderId) {
             showNotification('Les informations de suivi seront bientôt disponibles pour la commande #' + orderId, 'info');
         }
         
-        // Fonction pour filtrer rapidement par statut
-        function quickFilter(status) {
-            window.location.href = 'orders.php?status=' + status;
-        }
-        
-        // Fonction pour afficher une notification
         function showNotification(message, type = 'info') {
             const alert = document.createElement('div');
             alert.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 end-0 m-3`;
@@ -1214,7 +1191,6 @@ $stats = $stats_query->get_result()->fetch_assoc();
             }, 5000);
         }
 
-        // Mise à jour de l'heure en temps réel
         const updateTime = () => {
             const now = new Date();
             const timeDisplay = document.querySelector('.time-display');
@@ -1231,52 +1207,19 @@ $stats = $stats_query->get_result()->fetch_assoc();
         setInterval(updateTime, 1000);
         updateTime();
 
-        // Active nav item based on current page
-        const currentPage = window.location.pathname.split('/').pop() || 'orders.php';
-        document.querySelectorAll('.nav-item').forEach(item => {
-            if (item.getAttribute('href') === currentPage) {
-                item.classList.add('active');
-            } else {
-                item.classList.remove('active');
-            }
-        });
-
-        // Animation des cartes de commande
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.style.opacity = '1';
-                    entry.target.style.transform = 'translateY(0)';
-                }
-            });
-        }, { threshold: 0.1 });
-
-        // Appliquer l'animation aux cartes de commande
-        document.querySelectorAll('.order-card').forEach(card => {
-            card.style.opacity = '0';
-            card.style.transform = 'translateY(20px)';
-            card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
-            observer.observe(card);
-        });
-
-        // Raccourcis clavier
         document.addEventListener('keydown', function(e) {
-            // N pour nouvelle commande
             if (e.key === 'n' && e.ctrlKey) {
                 e.preventDefault();
-                window.location.href = 'orders.php?action=new';
+                window.location.href = 'new_order.php';
             }
-            // F pour focus sur la recherche
             if (e.key === 'f' && e.ctrlKey) {
                 e.preventDefault();
                 document.querySelector('input[name="search"]').focus();
             }
-            // R pour réinitialiser les filtres
             if (e.key === 'r' && e.ctrlKey) {
                 e.preventDefault();
                 window.location.href = 'orders.php';
             }
-            // E pour exporter
             if (e.key === 'e' && e.ctrlKey) {
                 e.preventDefault();
                 window.location.href = 'export_orders.php';
