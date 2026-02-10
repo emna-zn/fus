@@ -111,30 +111,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
         
         if ($stmt->execute()) {
             if (!empty($_FILES['new_images']['name'][0])) {
-                $upload_dir = '../uploads/products/';
+                $upload_dir = $_SERVER['DOCUMENT_ROOT'] . '/uploads/products/';
                 if (!is_dir($upload_dir)) {
                     mkdir($upload_dir, 0777, true);
-                }
-                
-                foreach ($_FILES['new_images']['tmp_name'] as $key => $tmp_name) {
-                    if ($_FILES['new_images']['error'][$key] === UPLOAD_ERR_OK) {
-                        $file_name = uniqid() . '_' . basename($_FILES['new_images']['name'][$key]);
-                        $file_path = $upload_dir . $file_name;
-                        
-                        if (move_uploaded_file($tmp_name, $file_path)) {
-                            $is_main = ($key === 0 && empty($product_images)) ? 1 : 0;
-                            $img_stmt = $conn->prepare("
-                                INSERT INTO product_images (product_id, image_url, is_main) 
-                                VALUES (?, ?, ?)
-                            ");
-                            $image_url = '/uploads/products/' . $file_name;
-                            $img_stmt->bind_param("isi", $product_id, $image_url, $is_main);
-                            $img_stmt->execute();
-                            $img_stmt->close();
-                        }
+                            }
+                            // Check if product has any main image
+                $check_main_stmt = $conn->prepare("SELECT COUNT(*) as count FROM product_images WHERE product_id = ? AND is_main = 1");
+                $check_main_stmt->bind_param("i", $product_id);
+                $check_main_stmt->execute();
+                $check_result = $check_main_stmt->get_result();
+                $main_count = $check_result->fetch_assoc()['count'];
+                $check_main_stmt->close();
+    
+    foreach ($_FILES['new_images']['tmp_name'] as $key => $tmp_name) {
+        if ($_FILES['new_images']['error'][$key] === UPLOAD_ERR_OK) {
+            $original_name = basename($_FILES['new_images']['name'][$key]);
+            $file_extension = pathinfo($original_name, PATHINFO_EXTENSION);
+            $file_name = uniqid() . '_' . time() . '.' . $file_extension;
+            $file_path = $upload_dir . $file_name;
+            
+            // Debug: afficher les informations d'upload
+            // Validate file is an image
+            $allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            $file_type = mime_content_type($tmp_name);
+            
+            if (in_array($file_type, $allowed_types)) {
+                if (move_uploaded_file($tmp_name, $file_path)) {
+                    // Determine if this should be main image
+                    $is_main = ($main_count == 0 && $key == 0) ? 1 : 0;
+                    
+                    $img_stmt = $conn->prepare("
+                        INSERT INTO product_images (product_id, image_url, is_main) 
+                        VALUES (?, ?, ?)
+                    ");
+                    $image_url = '/uploads/products/' . $file_name;
+                    $img_stmt->bind_param("isi", $product_id, $image_url, $is_main);
+                    
+                    if ($img_stmt->execute()) {
+                        $main_count++;
+                    } else {
+                        error_log("Image insert error: " . $img_stmt->error);
                     }
+                    $img_stmt->close();
                 }
             }
+        }
+    }
+}
             
             if (isset($_POST['delete_images'])) {
                 foreach ($_POST['delete_images'] as $image_id) {
@@ -168,17 +191,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
             
             $message = "Produit mis à jour avec succès !";
             $message_type = 'success';
-            $stmt = $conn->prepare("
+            
+            // Fermer le statement UPDATE avant d'en créer un nouveau
+            $stmt->close();
+            
+            // Récupérer à nouveau les données du produit avec un NOUVEAU statement
+            $stmt2 = $conn->prepare("
                 SELECT p.*, c.name as collection_name 
                 FROM products p 
                 LEFT JOIN collections c ON p.collection_id = c.id 
                 WHERE p.id = ?
             ");
-            $stmt->bind_param("i", $product_id);
-            $stmt->execute();
-            $result = $stmt->get_result();
+            $stmt2->bind_param("i", $product_id);
+            $stmt2->execute();
+            $result = $stmt2->get_result();
             $product = $result->fetch_assoc();
-            $stmt->close();
+            $stmt2->close();
+            
+            // Récupérer à nouveau les images
             $images_stmt = $conn->prepare("SELECT * FROM product_images WHERE product_id = ? ORDER BY is_main DESC, upload_date DESC");
             $images_stmt->bind_param("i", $product_id);
             $images_stmt->execute();
@@ -192,8 +222,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
         } else {
             $message = "Erreur lors de la mise à jour du produit : " . $conn->error;
             $message_type = 'danger';
+            $stmt->close();
         }
-        $stmt->close();
     } else {
         $message = implode("<br>", $errors);
         $message_type = 'danger';

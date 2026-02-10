@@ -34,6 +34,7 @@ $images_query = $conn->prepare("SELECT id, image_url, is_main FROM product_image
 $images_query->bind_param("i", $product_id);
 $images_query->execute();
 $images = $images_query->get_result();
+
 $similar_query = $conn->prepare("SELECT p.id, p.reference, p.name, p.moq, p.fabric_composition,
                                 (SELECT image_url FROM product_images WHERE product_id = p.id AND is_main = 1 LIMIT 1) as image_url
                                 FROM products p 
@@ -46,51 +47,28 @@ $similar_products = $similar_query->get_result();
 $washings = [];
 $colors = [];
 $sizes = [];
-try {
-    $washings_query = $conn->prepare("SELECT washing_type FROM product_washings WHERE product_id = ?");
-    $washings_query->bind_param("i", $product_id);
-    $washings_query->execute();
-    $washings_result = $washings_query->get_result();
-    while ($washing = $washings_result->fetch_assoc()) {
-        $washings[] = $washing['washing_type'];
-    }
-} catch (Exception $e) {
-    if (!empty($product['wash_types'])) {
-        $washings = explode(',', $product['wash_types']);
-        $washings = array_map('trim', $washings);
-    }
+
+if (!empty($product['wash_types'])) {
+    $washings = explode(',', $product['wash_types']);
+    $washings = array_map('trim', $washings);
 }
 
-try {
-    $stock_query = $conn->prepare("SELECT DISTINCT color, size FROM product_stock WHERE product_id = ?");
-    $stock_query->bind_param("i", $product_id);
-    $stock_query->execute();
-    $stock_result = $stock_query->get_result();
-    while ($stock = $stock_result->fetch_assoc()) {
-        if (!empty($stock['color']) && !in_array($stock['color'], $colors)) {
-            $colors[] = $stock['color'];
-        }
-        if (!empty($stock['size']) && !in_array($stock['size'], $sizes)) {
-            $sizes[] = $stock['size'];
-        }
-    }
-} catch (Exception $e) {
-    if (!empty($product['available_colors'])) {
-        $colors = explode(',', $product['available_colors']);
-        $colors = array_map('trim', $colors);
-    }
-    if (!empty($product['available_sizes'])) {
-        $sizes = explode(',', $product['available_sizes']);
-        $sizes = array_map('trim', $sizes);
-    }
+if (!empty($product['available_colors'])) {
+    $colors = explode(',', $product['available_colors']);
+    $colors = array_map('trim', $colors);
 }
 
-if (empty($colors) && !empty($product['colors'])) {
+if (!empty($product['available_sizes'])) {
+    $sizes = explode(',', $product['available_sizes']);
+    $sizes = array_map('trim', $sizes);
+}
+
+if (empty($colors) && isset($product['colors'])) {
     $colors = explode(',', $product['colors']);
     $colors = array_map('trim', $colors);
 }
 
-if (empty($sizes) && !empty($product['sizes'])) {
+if (empty($sizes) && isset($product['sizes'])) {
     $sizes = explode(',', $product['sizes']);
     $sizes = array_map('trim', $sizes);
 }
@@ -102,16 +80,9 @@ if (empty($sizes) && !empty($product['sizes'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Détails Produit - FUS Denim</title>
     
-    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    
-    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
-    
-    <!-- Lightbox -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/css/lightbox.min.css" rel="stylesheet">
     
     <style>
@@ -156,7 +127,6 @@ if (empty($sizes) && !empty($product['sizes'])) {
             font-weight: 700;
         }
 
-        /* Sidebar Navigation */
         .sidebar {
             position: fixed;
             left: 0;
@@ -308,7 +278,6 @@ if (empty($sizes) && !empty($product['sizes'])) {
             border-color: rgba(255, 255, 255, 0.3);
         }
 
-        /* Main Content */
         .main-content {
             margin-left: 280px;
             padding: 2rem;
@@ -349,7 +318,6 @@ if (empty($sizes) && !empty($product['sizes'])) {
             box-shadow: 0 10px 20px rgba(59, 130, 246, 0.2);
         }
 
-        /* Product Details */
         .product-detail-card {
             background: var(--white);
             border-radius: 16px;
@@ -529,7 +497,6 @@ if (empty($sizes) && !empty($product['sizes'])) {
             color: var(--white);
         }
 
-        /* Similar Products */
         .similar-section {
             margin-top: 3rem;
         }
@@ -592,7 +559,6 @@ if (empty($sizes) && !empty($product['sizes'])) {
             color: var(--accent-5);
         }
 
-        /* Footer */
         .footer {
             margin-top: 3rem;
             padding-top: 2rem;
@@ -609,7 +575,6 @@ if (empty($sizes) && !empty($product['sizes'])) {
             font-weight: 600;
         }
 
-        /* Responsive */
         @media (max-width: 1200px) {
             .sidebar {
                 width: 260px;
@@ -663,7 +628,6 @@ if (empty($sizes) && !empty($product['sizes'])) {
     </style>
 </head>
 <body>
-    <!-- Sidebar -->
     <div class="sidebar">
         <div class="logo">
             <i class="fas fa-gem"></i>
@@ -718,9 +682,7 @@ if (empty($sizes) && !empty($product['sizes'])) {
         </div>
     </div>
 
-    <!-- Main Content -->
     <div class="main-content">
-        <!-- Header -->
         <div class="header">
             <div class="header-title">
                 <h1>Détails Produit</h1>
@@ -731,7 +693,6 @@ if (empty($sizes) && !empty($product['sizes'])) {
             </a>
         </div>
 
-        <!-- Breadcrumb -->
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
                 <li class="breadcrumb-item"><a href="dashboard_client.php">Tableau de bord</a></li>
@@ -742,7 +703,6 @@ if (empty($sizes) && !empty($product['sizes'])) {
 
         <div class="product-detail-card">
             <div class="row">
-                <!-- Images Gallery -->
                 <div class="col-lg-6">
                     <?php 
                     $main_image = null;
@@ -785,9 +745,7 @@ if (empty($sizes) && !empty($product['sizes'])) {
                     <?php endif; ?>
                 </div>
                 
-                <!-- Product Details -->
                 <div class="col-lg-6">
-                    <!-- Badges -->
                     <div class="product-badges">
                         <?php if (!empty($product['collection_name'])): ?>
                             <span class="product-badge badge-collection">
@@ -800,21 +758,19 @@ if (empty($sizes) && !empty($product['sizes'])) {
                         <span class="product-badge badge-moq">
                             MOQ: <?php echo !empty($product['moq']) ? $product['moq'] : 'N/A'; ?> pièces
                         </span>
-                        <?php if (!empty($product['production_time']) && $product['production_time'] <= 30): ?>
+                        <?php if (!empty($product['production_time_days']) && $product['production_time_days'] <= 30): ?>
                             <span class="product-badge badge-fast">
                                 Production rapide
                             </span>
                         <?php endif; ?>
                     </div>
                     
-                    <!-- Title & Reference -->
                     <h2 class="mt-3"><?php echo htmlspecialchars($product['name']); ?></h2>
                     <p class="text-muted mb-4">
                         <i class="fas fa-hashtag me-2"></i>
                         Référence: <strong><?php echo htmlspecialchars($product['reference']); ?></strong>
                     </p>
                     
-                    <!-- Description -->
                     <?php if (!empty($product['description'])): ?>
                         <div class="mb-4">
                             <h5><i class="fas fa-align-left me-2"></i>Description</h5>
@@ -822,9 +778,7 @@ if (empty($sizes) && !empty($product['sizes'])) {
                         </div>
                     <?php endif; ?>
                     
-                    <!-- Specifications Grid -->
                     <div class="specs-grid">
-                        <!-- Informations générales -->
                         <div class="spec-card">
                             <h5><i class="fas fa-info-circle me-2"></i>Informations générales</h5>
                             <div class="spec-item">
@@ -845,7 +799,6 @@ if (empty($sizes) && !empty($product['sizes'])) {
                             <?php endif; ?>
                         </div>
                         
-                        <!-- Données techniques -->
                         <div class="spec-card">
                             <h5><i class="fas fa-cogs me-2"></i>Données techniques</h5>
                             <?php if (!empty($product['fabric_composition'])): ?>
@@ -854,10 +807,10 @@ if (empty($sizes) && !empty($product['sizes'])) {
                                 <span class="spec-value"><?php echo htmlspecialchars($product['fabric_composition']); ?></span>
                             </div>
                             <?php endif; ?>
-                            <?php if (!empty($product['weight'])): ?>
+                            <?php if (!empty($product['weight_oz'])): ?>
                             <div class="spec-item">
                                 <span class="spec-label">Grammage</span>
-                                <span class="spec-value"><?php echo $product['weight']; ?> oz</span>
+                                <span class="spec-value"><?php echo $product['weight_oz']; ?> oz</span>
                             </div>
                             <?php endif; ?>
                             <?php if (!empty($washings)): ?>
@@ -868,7 +821,6 @@ if (empty($sizes) && !empty($product['sizes'])) {
                             <?php endif; ?>
                         </div>
                         
-                        <!-- Couleurs & Tailles -->
                         <div class="spec-card">
                             <h5><i class="fas fa-palette me-2"></i>Couleurs & Tailles</h5>
                             <?php if (!empty($colors)): ?>
@@ -891,29 +843,21 @@ if (empty($sizes) && !empty($product['sizes'])) {
                             <?php endif; ?>
                         </div>
                         
-                        <!-- Données commerciales -->
                         <div class="spec-card">
                             <h5><i class="fas fa-chart-line me-2"></i>Données commerciales</h5>
                             <div class="spec-item">
                                 <span class="spec-label">MOQ (Quantité min.)</span>
                                 <span class="spec-value"><?php echo !empty($product['moq']) ? $product['moq'] : 'N/A'; ?> pièces</span>
                             </div>
-                            <?php if (!empty($product['production_time'])): ?>
+                            <?php if (!empty($product['production_time_days'])): ?>
                             <div class="spec-item">
                                 <span class="spec-label">Délai de production</span>
-                                <span class="spec-value"><?php echo $product['production_time']; ?> jours</span>
-                            </div>
-                            <?php endif; ?>
-                            <?php if (!empty($product['notes'])): ?>
-                            <div class="spec-item">
-                                <span class="spec-label">Notes spécifiques</span>
-                                <span class="spec-value"><?php echo htmlspecialchars(substr($product['notes'], 0, 100)); ?>...</span>
+                                <span class="spec-value"><?php echo $product['production_time_days']; ?> jours</span>
                             </div>
                             <?php endif; ?>
                         </div>
                     </div>
                     
-                    <!-- Action Buttons -->
                     <div class="product-actions">
                         <a href="orders.php?action=new&product=<?php echo $product['id']; ?>" 
                            class="btn-action btn-order">
@@ -921,8 +865,8 @@ if (empty($sizes) && !empty($product['sizes'])) {
                             Passer commande
                         </a>
                         
-                        <?php if (!empty($product['pdf_url'])): ?>
-                            <a href="<?php echo htmlspecialchars($product['pdf_url']); ?>" 
+                        <?php if (!empty($product['pdf_spec_url'])): ?>
+                            <a href="<?php echo htmlspecialchars($product['pdf_spec_url']); ?>" 
                                class="btn-action btn-outline" 
                                target="_blank">
                                 <i class="fas fa-file-pdf"></i>
@@ -944,7 +888,6 @@ if (empty($sizes) && !empty($product['sizes'])) {
             </div>
         </div>
 
-        <!-- Similar Products -->
         <?php if ($similar_products && $similar_products->num_rows > 0): ?>
             <div class="similar-section">
                 <h3><i class="fas fa-layer-group me-2"></i>Produits similaires</h3>
@@ -972,7 +915,6 @@ if (empty($sizes) && !empty($product['sizes'])) {
             </div>
         <?php endif; ?>
 
-        <!-- Footer -->
         <div class="footer">
             <div>
                 <i class="fas fa-gem" style="color: var(--accent-1);"></i>
@@ -986,12 +928,10 @@ if (empty($sizes) && !empty($product['sizes'])) {
         </div>
     </div>
 
-    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/js/lightbox.min.js"></script>
     
     <script>
-        // Configuration Lightbox
         lightbox.option({
             'resizeDuration': 200,
             'wrapAround': true,
@@ -999,7 +939,6 @@ if (empty($sizes) && !empty($product['sizes'])) {
             'fadeDuration': 300
         });
 
-        // Fonction pour imprimer les détails
         function printDetails() {
             const printContent = `
                 <html>
@@ -1032,12 +971,12 @@ if (empty($sizes) && !empty($product['sizes'])) {
                         <?php if (!empty($product['fabric_composition'])): ?>
                         <p><strong>Composition:</strong> <?php echo htmlspecialchars($product['fabric_composition']); ?></p>
                         <?php endif; ?>
-                        <?php if (!empty($product['weight'])): ?>
-                        <p><strong>Grammage:</strong> <?php echo $product['weight']; ?> oz</p>
+                        <?php if (!empty($product['weight_oz'])): ?>
+                        <p><strong>Grammage:</strong> <?php echo $product['weight_oz']; ?> oz</p>
                         <?php endif; ?>
                         <p><strong>MOQ:</strong> <?php echo !empty($product['moq']) ? $product['moq'] : 'N/A'; ?> pièces</p>
-                        <?php if (!empty($product['production_time'])): ?>
-                        <p><strong>Délai production:</strong> <?php echo $product['production_time']; ?> jours</p>
+                        <?php if (!empty($product['production_time_days'])): ?>
+                        <p><strong>Délai production:</strong> <?php echo $product['production_time_days']; ?> jours</p>
                         <?php endif; ?>
                         <?php if (!empty($colors)): ?>
                         <p><strong>Couleurs:</strong> <?php echo implode(', ', $colors); ?></p>
@@ -1060,7 +999,6 @@ if (empty($sizes) && !empty($product['sizes'])) {
             printWindow.print();
         }
 
-        // Fonction pour partager le produit
         function shareProduct() {
             if (navigator.share) {
                 navigator.share({
@@ -1071,7 +1009,6 @@ if (empty($sizes) && !empty($product['sizes'])) {
                 .then(() => console.log('Produit partagé avec succès'))
                 .catch((error) => console.log('Erreur de partage:', error));
             } else {
-                // Fallback pour les navigateurs sans support
                 const shareUrl = window.location.href;
                 navigator.clipboard.writeText(shareUrl).then(() => {
                     showNotification('Lien copié dans le presse-papier!', 'success');
@@ -1079,7 +1016,6 @@ if (empty($sizes) && !empty($product['sizes'])) {
             }
         }
 
-        // Notification
         function showNotification(message, type) {
             const notification = document.createElement('div');
             notification.className = `alert alert-${type} position-fixed top-0 end-0 m-3`;
@@ -1098,27 +1034,21 @@ if (empty($sizes) && !empty($product['sizes'])) {
             }, 3000);
         }
 
-        // Initialisation
         document.addEventListener('DOMContentLoaded', function() {
-            // Raccourcis clavier
             document.addEventListener('keydown', function(e) {
-                // Échap pour retour au catalogue
                 if (e.key === 'Escape') {
                     window.location.href = 'catalog.php';
                 }
-                // Espace pour commander
                 if (e.key === ' ' && !e.target.matches('input, textarea, button, a')) {
                     e.preventDefault();
                     document.querySelector('.btn-order').click();
                 }
-                // P pour imprimer
                 if (e.key === 'p' && (e.ctrlKey || e.metaKey)) {
                     e.preventDefault();
                     printDetails();
                 }
             });
 
-            // Animation des cartes au chargement
             const cards = document.querySelectorAll('.spec-card, .similar-card');
             cards.forEach((card, index) => {
                 card.style.opacity = '0';

@@ -1102,9 +1102,6 @@ if ($countries_result) {
                     <i class="fas fa-users"></i> Liste des clients
                 </div>
                 <div>
-                    <a href="export_clients.php" class="card-action me-2">
-                        <i class="fas fa-download me-2"></i>Exporter
-                    </a>
                     <a href="client_create.php" class="card-action">
                         <i class="fas fa-plus me-2"></i>Nouveau client
                     </a>

@@ -1322,12 +1322,7 @@ if ($collections_result) {
                     </a>
                     
                     <?php if (!empty($product['pdf_spec_url'])): ?>
-                    <a href="<?php echo htmlspecialchars($product['pdf_spec_url']); ?>" 
-                       class="btn-download" 
-                       target="_blank"
-                       download="Fiche_technique_<?php echo $product['reference']; ?>.pdf">
-                        <i class="fas fa-download"></i> Fiche PDF
-                    </a>
+                   
                     <?php else: ?>
                     <span class="btn-download disabled">
                         <i class="fas fa-download"></i> PDF indisponible
@@ -1467,15 +1462,7 @@ if ($collections_result) {
         });
 
         // Confirmation pour les téléchargements
-        document.querySelectorAll('.btn-download').forEach(btn => {
-            if (!btn.classList.contains('disabled')) {
-                btn.addEventListener('click', function(e) {
-                    if (!confirm('Télécharger la fiche technique PDF ?')) {
-                        e.preventDefault();
-                    }
-                });
-            }
-        });
+        
 
         // Mise à jour de l'heure en temps réel
         const updateTime = () => {

@@ -1039,9 +1039,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
                         <button type="button" class="btn btn-outline-danger" onclick="requestAccountDeletion()">
                             <i class="fas fa-trash me-2"></i>Demander la suppression du compte
                         </button>
-                        <button type="button" class="btn btn-outline-warning" onclick="exportUserData()">
-                            <i class="fas fa-download me-2"></i>Exporter mes données
-                        </button>
                     </div>
                 </div>
             </div>

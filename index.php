@@ -1117,46 +1117,7 @@
         </div>
     </section>
 
-    <!-- Certifications -->
-    <section class="section-padding" style="background: var(--gray-50);">
-        <div class="container">
-            <div class="section-header text-center">
-                <span class="section-badge fade-in-up">Certified Excellence</span>
-                <h2 class="section-title fade-in-up">International Standards</h2>
-            </div>
-            
-            <div class="row g-4 justify-content-center">
-                <div class="col-lg-3 col-md-4 col-6">
-                    <div class="cert-card fade-in-up">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Oeko-tex_logo.svg/1280px-Oeko-tex_logo.svg.png" 
-                             alt="OEKO-TEX" class="cert-logo">
-                        <h6 style="font-size: 0.9rem; font-weight: 600; color: var(--gray-700);">OEKO-TEX</h6>
-                    </div>
-                </div>
-                <div class="col-lg-3 col-md-4 col-6">
-                    <div class="cert-card fade-in-up" style="transition-delay: 0.1s;">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Reach_logo.svg/2560px-Reach_logo.svg.png" 
-                             alt="REACH" class="cert-logo">
-                        <h6 style="font-size: 0.9rem; font-weight: 600; color: var(--gray-700);">REACH</h6>
-                    </div>
-                </div>
-                <div class="col-lg-3 col-md-4 col-6">
-                    <div class="cert-card fade-in-up" style="transition-delay: 0.2s;">
-                        <img src="https://cdn.worldvectorlogo.com/logos/gots-1.svg" 
-                             alt="GOTS" class="cert-logo">
-                        <h6 style="font-size: 0.9rem; font-weight: 600; color: var(--gray-700);">GOTS</h6>
-                    </div>
-                </div>
-                <div class="col-lg-3 col-md-4 col-6">
-                    <div class="cert-card fade-in-up" style="transition-delay: 0.3s;">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/ISO_9001.svg/1280px-ISO_9001.svg.png" 
-                             alt="ISO 9001" class="cert-logo">
-                        <h6 style="font-size: 0.9rem; font-weight: 600; color: var(--gray-700);">ISO 9001</h6>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
+   
 
     <!-- CTA -->
     <section class="section-padding">
@@ -1242,11 +1203,7 @@
                         &copy; 2026 Fashion Unique Solutions. All rights reserved.
                     </p>
                 </div>
-                <div class="col-md-6 text-md-end">
-                    <p class="mb-0" style="color: var(--gray-500); font-size: 0.9rem;">
-                        Crafted with excellence for global fashion
-                    </p>
-                </div>
+                
             </div>
         </div>
     </footer>
@@ -1280,7 +1237,7 @@
         // Counter animation
         const animateCounter = (counter) => {
             const target = +counter.dataset.count;
-            const speed = 200;
+            const speed = 300;
             let count = 0;
 
             const updateCount = () => {

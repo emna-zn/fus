@@ -1087,72 +1087,6 @@ if ($clients_result) {
             </div>
         </div>
 
-        <!-- Filters -->
-        <div class="card-modern">
-            <div class="card-header">
-                <div class="card-title">
-                    <i class="fas fa-filter"></i> Filtres de recherche
-                </div>
-                <?php if ($search || $status_filter || $client_filter || $date_from || $date_to): ?>
-                <a href="order.php" class="btn-outline-modern">
-                    <i class="fas fa-times"></i> Réinitialiser
-                </a>
-                <?php endif; ?>
-            </div>
-            
-            <form method="GET" class="row g-3 filter-form">
-                <div class="col-md-4">
-                    <div class="search-box">
-                        <i class="fas fa-search"></i>
-                        <input type="text" class="form-control" name="search" 
-                               placeholder="Rechercher une commande..." 
-                               value="<?php echo htmlspecialchars($search); ?>">
-                    </div>
-                </div>
-                <div class="col-md-2">
-                    <select class="form-select" name="status">
-                        <option value="">Tous les statuts</option>
-                        <option value="received" <?php echo $status_filter == 'received' ? 'selected' : ''; ?>>Reçue</option>
-                        <option value="validating" <?php echo $status_filter == 'validating' ? 'selected' : ''; ?>>En validation</option>
-                        <option value="confirmed" <?php echo $status_filter == 'confirmed' ? 'selected' : ''; ?>>Confirmée</option>
-                        <option value="production" <?php echo $status_filter == 'production' ? 'selected' : ''; ?>>En production</option>
-                        <option value="shipped" <?php echo $status_filter == 'shipped' ? 'selected' : ''; ?>>Expédiée</option>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <select class="form-select" name="client_id">
-                        <option value="">Tous les clients</option>
-                        <?php foreach($clients as $client): ?>
-                        <option value="<?php echo $client['id']; ?>" 
-                                <?php echo $client_filter == $client['id'] ? 'selected' : ''; ?>>
-                            <?php echo htmlspecialchars($client['company_name']); ?>
-                        </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <input type="date" class="form-control" name="date_from" 
-                           value="<?php echo htmlspecialchars($date_from); ?>" 
-                           placeholder="Date de début">
-                </div>
-                <div class="col-md-2">
-                    <input type="date" class="form-control" name="date_to" 
-                           value="<?php echo htmlspecialchars($date_to); ?>" 
-                           placeholder="Date de fin">
-                </div>
-                <div class="col-md-12 mt-3">
-                    <div class="d-flex gap-2">
-                        <button type="submit" class="btn-modern">
-                            <i class="fas fa-filter"></i> Appliquer les filtres
-                        </button>
-                        <a href="export_orders.php" class="btn-outline-modern">
-                            <i class="fas fa-download"></i> Exporter
-                        </a>
-                    </div>
-                </div>
-            </form>
-        </div>
-
         <!-- Orders Table -->
         <div class="card-modern">
             <div class="card-header">
@@ -1291,11 +1225,7 @@ if ($clients_result) {
                     ?>
                     • CA : <?php echo number_format($total_value, 2, ',', ' '); ?> €
                 </div>
-                <div>
-                    <button class="btn-outline-modern btn-sm" onclick="printOrders()">
-                        <i class="fas fa-print me-2"></i>Imprimer
-                    </button>
-                </div>
+                
             </div>
             <?php endif; ?>
         </div>

@@ -850,8 +850,7 @@ $page_title = "Certifications & Compliance | FUS Premium Denim";
             <div class="row g-4">
                 <div class="col-lg-4 col-md-6">
                     <div class="certification-card fade-in-up">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Oeko-tex_logo.svg/1280px-Oeko-tex_logo.svg.png" 
-                             alt="OEKO-TEX" class="certification-logo">
+                        
                         <span class="certification-badge">Textile Safety</span>
                         <h4 class="mb-3">OEKO-TEX Standard 100</h4>
                         <p>
@@ -866,8 +865,7 @@ $page_title = "Certifications & Compliance | FUS Premium Denim";
                 
                 <div class="col-lg-4 col-md-6">
                     <div class="certification-card fade-in-up" style="transition-delay: 0.1s;">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/ISO_9001.svg/1280px-ISO_9001.svg.png" 
-                             alt="ISO 9001" class="certification-logo">
+                        
                         <span class="certification-badge">Quality Management</span>
                         <h4 class="mb-3">ISO 9001:2015</h4>
                         <p>
@@ -882,8 +880,7 @@ $page_title = "Certifications & Compliance | FUS Premium Denim";
                 
                 <div class="col-lg-4 col-md-6">
                     <div class="certification-card fade-in-up" style="transition-delay: 0.2s;">
-                        <img src="https://cdn.worldvectorlogo.com/logos/gots-1.svg" 
-                             alt="GOTS" class="certification-logo">
+                        
                         <span class="certification-badge">Organic Textiles</span>
                         <h4 class="mb-3">Global Organic Textile Standard</h4>
                         <p>

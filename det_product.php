@@ -1067,16 +1067,9 @@ $similar_stmt->close();
                 
                 <div class="action-buttons">
                     <?php if (!empty($product['pdf_spec_url'])): ?>
-                    <a href="<?php echo htmlspecialchars($product['pdf_spec_url']); ?>" 
-                       class="btn-download" 
-                       target="_blank"
-                       download="Fiche_technique_<?php echo $product['reference']; ?>.pdf">
-                        <i class="fas fa-download"></i> Télécharger la fiche PDF
-                    </a>
+                   
                     <?php else: ?>
-                    <span class="btn-download disabled">
-                        <i class="fas fa-download"></i> Fiche PDF indisponible
-                    </span>
+                   
                     <?php endif; ?>
                     
                     <?php if (!empty($product['techpack_url'])): ?>

@@ -1,6 +1,89 @@
 <?php
 session_start();
+require_once 'connexion.php';
 $page_title = "Contact FUS | Request B2B Access";
+
+// Traitement du formulaire B2B Access
+$success_message = '';
+$error_message = '';
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['form_type']) && $_POST['form_type'] == 'b2b_access') {
+    $database = new Database();
+    $conn = $database->getConnection();
+    
+    // Nettoyer et valider les données
+    $company_name = htmlspecialchars(trim($_POST['company_name']));
+    $contact_person = htmlspecialchars(trim($_POST['full_name']));
+    $email = filter_var(trim($_POST['email']), FILTER_SANITIZE_EMAIL);
+    $phone = htmlspecialchars(trim($_POST['phone']));
+    $country = htmlspecialchars(trim($_POST['country']));
+    $website = htmlspecialchars(trim($_POST['website']));
+    $message = htmlspecialchars(trim($_POST['additional_info'] ?? ''));
+    $job_title = htmlspecialchars(trim($_POST['job_title'] ?? ''));
+    
+    // Validation supplémentaire
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error_message = "Veuillez entrer une adresse email valide.";
+    } elseif (empty($company_name) || empty($contact_person) || empty($email) || empty($phone) || empty($country)) {
+        $error_message = "Veuillez remplir tous les champs obligatoires.";
+    } else {
+        // Vérifier si une demande existe déjà pour cet email
+        $check_stmt = $conn->prepare("SELECT id FROM access_requests WHERE email = ? AND status = 'pending'");
+        $check_stmt->bind_param("s", $email);
+        $check_stmt->execute();
+        $check_result = $check_stmt->get_result();
+        
+        if ($check_result->num_rows > 0) {
+            $error_message = "Une demande est déjà en cours d'examen pour cet email.";
+        } else {
+            // Insérer la demande
+            $stmt = $conn->prepare("
+                INSERT INTO access_requests 
+                (company_name, contact_person, email, phone, country, website, message, status, requested_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
+            ");
+            
+            $stmt->bind_param(
+                "sssssss",
+                $company_name,
+                $contact_person,
+                $email,
+                $phone,
+                $country,
+                $website,
+                $message
+            );
+            
+            if ($stmt->execute()) {
+                $success_message = "Votre demande d'accès a été soumise avec succès ! Notre équipe l'examinera dans les 48 heures.";
+                
+                // Préparer l'email pour l'admin
+                $admin_email = "nader@gmail.com"; // Email de l'admin
+                $subject = "Nouvelle demande d'accès B2B: " . $company_name;
+                $admin_message = "Une nouvelle demande d'accès B2B a été soumise :\n\n" .
+                               "Entreprise: " . $company_name . "\n" .
+                               "Contact: " . $contact_person . "\n" .
+                               "Poste: " . $job_title . "\n" .
+                               "Email: " . $email . "\n" .
+                               "Téléphone: " . $phone . "\n" .
+                               "Pays: " . $country . "\n" .
+                               "Site web: " . $website . "\n" .
+                               "Message: " . $message . "\n\n" .
+                               "Connectez-vous au panneau d'administration pour examiner la demande.";
+                
+                // Envoyer l'email (vérifiez que la fonction mail est configurée)
+                @mail($admin_email, $subject, $admin_message);
+                
+            } else {
+                $error_message = "Erreur lors de la soumission de votre demande. Veuillez réessayer ou nous contacter directement.";
+            }
+            
+            $stmt->close();
+        }
+        $check_stmt->close();
+    }
+    $conn->close();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -907,8 +990,8 @@ $page_title = "Contact FUS | Request B2B Access";
                         </div>
                         <h4 class="mb-3">Visit Us</h4>
                         <p>
-                            Industrial Zone Sidi Rezig<br>
-                            2035 Tunis, Tunisia
+                            Industrial Zone lamta<br>
+                            Monestir, Tunisia
                         </p>
                         <a href="#map">
                             View on map <i class="fas fa-arrow-right ms-2"></i>
@@ -955,9 +1038,7 @@ $page_title = "Contact FUS | Request B2B Access";
                     <div class="form-container fade-in-up">
                         <!-- Form Tabs -->
                         <div class="form-tabs">
-                            <button class="form-tab active" data-target="general-form">General Inquiry</button>
                             <button class="form-tab" data-target="access-form">Request B2B Access</button>
-                            <button class="form-tab" data-target="sample-form">Request Samples</button>
                         </div>
                         
                         <!-- Success Message -->
@@ -969,76 +1050,54 @@ $page_title = "Contact FUS | Request B2B Access";
                             <p class="mb-0">Thank you for contacting FUS Denim. Our team will get back to you within 24 hours.</p>
                         </div>
                         
-                        <!-- General Inquiry Form -->
-                        <form id="general-form" class="form-content active">
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Full Name *</label>
-                                    <input type="text" class="form-control" required>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Company Name</label>
-                                    <input type="text" class="form-control">
-                                </div>
-                            </div>
-                            
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Email Address *</label>
-                                    <input type="email" class="form-control" required>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Phone Number</label>
-                                    <input type="tel" class="form-control">
-                                </div>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label">Subject *</label>
-                                <input type="text" class="form-control" required>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label">Message *</label>
-                                <textarea class="form-control" rows="5" required></textarea>
-                            </div>
-                            
-                            <button type="submit" class="btn btn-modern">
-                                <i class="fas fa-paper-plane me-2"></i>Send Message
-                            </button>
-                        </form>
                         
                         <!-- B2B Access Request Form -->
-                        <form id="access-form" class="form-content">
+                        <form id="access-form" class="form-content" method="POST" action="">
                             <div class="alert alert-info mb-4">
                                 <i class="fas fa-info-circle me-2"></i>
                                 B2B portal access is reserved for verified business clients. Our team will review your application within 48 hours.
                             </div>
                             
+                            <?php if ($success_message): ?>
+                            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                                <i class="fas fa-check-circle me-2"></i>
+                                <?php echo $success_message; ?>
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                            <?php elseif ($error_message): ?>
+                            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                                <i class="fas fa-exclamation-circle me-2"></i>
+                                <?php echo $error_message; ?>
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                            <?php endif; ?>
+                            
+                            <input type="hidden" name="form_type" value="b2b_access">
+                            
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Full Name *</label>
-                                    <input type="text" class="form-control" required>
+                                    <input type="text" class="form-control" name="full_name" required>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Job Title *</label>
-                                    <input type="text" class="form-control" required>
+                                    <input type="text" class="form-control" name="job_title" required>
                                 </div>
                             </div>
                             
                             <div class="mb-3">
                                 <label class="form-label">Company Name *</label>
-                                <input type="text" class="form-control" required>
+                                <input type="text" class="form-control" name="company_name" required>
                             </div>
                             
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Company Website *</label>
-                                    <input type="url" class="form-control" required>
+                                    <input type="url" class="form-control" name="website" required>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Company Size *</label>
-                                    <select class="form-select" required>
+                                    <select class="form-select" name="company_size" required>
                                         <option value="">Select...</option>
                                         <option>1-10 employees</option>
                                         <option>11-50 employees</option>
@@ -1052,17 +1111,17 @@ $page_title = "Contact FUS | Request B2B Access";
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Email Address *</label>
-                                    <input type="email" class="form-control" required>
+                                    <input type="email" class="form-control" name="email" required>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Phone Number *</label>
-                                    <input type="tel" class="form-control" required>
+                                    <input type="tel" class="form-control" name="phone" required>
                                 </div>
                             </div>
                             
                             <div class="mb-3">
                                 <label class="form-label">Country *</label>
-                                <select class="form-select" required>
+                                <select class="form-select" name="country" required>
                                     <option value="">Select country...</option>
                                     <option>France</option>
                                     <option>Germany</option>
@@ -1078,7 +1137,7 @@ $page_title = "Contact FUS | Request B2B Access";
                             
                             <div class="mb-3">
                                 <label class="form-label">Business Type *</label>
-                                <select class="form-select" required>
+                                <select class="form-select" name="business_type" required>
                                     <option value="">Select...</option>
                                     <option>Fashion Brand</option>
                                     <option>Retailer</option>
@@ -1091,7 +1150,7 @@ $page_title = "Contact FUS | Request B2B Access";
                             
                             <div class="mb-3">
                                 <label class="form-label">Annual Denim Order Volume (approx.) *</label>
-                                <select class="form-select" required>
+                                <select class="form-select" name="order_volume" required>
                                     <option value="">Select...</option>
                                     <option>Less than 1,000 units</option>
                                     <option>1,000 - 5,000 units</option>
@@ -1103,88 +1162,16 @@ $page_title = "Contact FUS | Request B2B Access";
                             
                             <div class="mb-3">
                                 <label class="form-label">Additional Information</label>
-                                <textarea class="form-control" rows="3" placeholder="Tell us about your business and specific needs..."></textarea>
+                                <textarea class="form-control" name="additional_info" rows="3" placeholder="Tell us about your business and specific needs..."></textarea>
                             </div>
                             
-                            <div class="form-check mb-4">
-                                <input class="form-check-input" type="checkbox" id="terms" required>
-                                <label class="form-check-label" for="terms">
-                                    I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a> *
-                                </label>
-                            </div>
                             
                             <button type="submit" class="btn btn-modern">
                                 <i class="fas fa-user-plus me-2"></i>Submit Application
                             </button>
                         </form>
                         
-                        <!-- Sample Request Form -->
-                        <form id="sample-form" class="form-content">
-                            <div class="alert alert-info mb-4">
-                                <i class="fas fa-info-circle me-2"></i>
-                                Sample requests are available for qualified business clients. Please provide detailed information for faster processing.
-                            </div>
-                            
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Full Name *</label>
-                                    <input type="text" class="form-control" required>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Company Name *</label>
-                                    <input type="text" class="form-control" required>
-                                </div>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label">Interested Collection</label>
-                                <select class="form-select" multiple>
-                                    <option>Heritage Raw Denim</option>
-                                    <option>Tech Stretch Collection</option>
-                                    <option>Eco Organic Collection</option>
-                                    <option>Luxury Finish Collection</option>
-                                    <option>Everyday Essentials</option>
-                                    <option>Utility Collection</option>
-                                </select>
-                                <div class="form-text">Hold Ctrl/Cmd to select multiple collections</div>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label">Sample Type *</label>
-                                <select class="form-select" required>
-                                    <option value="">Select...</option>
-                                    <option>Swatch Cards</option>
-                                    <option>Full Garment Samples</option>
-                                    <option>Technical Specifications</option>
-                                    <option>All of the above</option>
-                                </select>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label">Shipping Address *</label>
-                                <textarea class="form-control" rows="3" required></textarea>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label">Project Timeline</label>
-                                <select class="form-select">
-                                    <option value="">Select...</option>
-                                    <option>Urgent (within 2 weeks)</option>
-                                    <option>Short-term (1-3 months)</option>
-                                    <option>Medium-term (3-6 months)</option>
-                                    <option>Long-term (6+ months)</option>
-                                </select>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label">Additional Notes</label>
-                                <textarea class="form-control" rows="3" placeholder="Specific requirements, colors, sizes, or special finishes..."></textarea>
-                            </div>
-                            
-                            <button type="submit" class="btn btn-modern">
-                                <i class="fas fa-box-open me-2"></i>Request Samples
-                            </button>
-                        </form>
+                        
                     </div>
                 </div>
                 
@@ -1193,6 +1180,21 @@ $page_title = "Contact FUS | Request B2B Access";
                         <!-- Map -->
                         <div class="map-container mb-4 fade-in-up" id="map">
                             <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d12783.715894957594!2d10.181530368224575!3d36.80653317338069!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x12fd337c5f567589%3A0x5f93e8e7c71f8d17!2sTunis%2C%20Tunisia!5e0!3m2!1sen!2s!4v1678900000000!5m2!1sen!2s" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+                        </div>
+                        
+                        <!-- Office Info Cards -->
+                        <div class="office-card fade-in-up" style="animation-delay: 0.1s;">
+                            <h6><i class="fas fa-building me-2 gradient-text"></i> Headquarters</h6>
+                            <p>Industrial Zone Sidi Rezig</p>
+                            <p>2035 Tunis, Tunisia</p>
+                            <p class="small"><i class="fas fa-clock me-1"></i> Mon-Fri: 8:00-18:00 CET</p>
+                        </div>
+                        
+                        <div class="office-card fade-in-up" style="animation-delay: 0.2s;">
+                            <h6><i class="fas fa-industry me-2 gradient-text"></i> Production Facility</h6>
+                            <p>Specialized denim manufacturing</p>
+                            <p>State-of-the-art equipment</p>
+                            <p class="small"><i class="fas fa-users me-1"></i> 150+ skilled workers</p>
                         </div>
                     </div>
                 </div>
@@ -1315,24 +1317,30 @@ $page_title = "Contact FUS | Request B2B Access";
             });
         });
         
-        // Form submission
+        // Form submission - only for forms without PHP backend
         document.querySelectorAll('form').forEach(form => {
             form.addEventListener('submit', function(e) {
-                e.preventDefault();
+                // Check if form has a form_type field (means it's handled by PHP)
+                const formType = this.querySelector('input[name="form_type"]');
                 
-                // Show success message
-                const successMessage = document.getElementById('success-message');
-                successMessage.style.display = 'block';
-                
-                // Hide form
-                this.style.display = 'none';
-                
-                // Reset form after 5 seconds
-                setTimeout(() => {
-                    successMessage.style.display = 'none';
-                    this.style.display = 'block';
-                    this.reset();
-                }, 5000);
+                if (!formType) {
+                    e.preventDefault();
+                    
+                    // Show success message for non-PHP forms
+                    const successMessage = document.getElementById('success-message');
+                    successMessage.style.display = 'block';
+                    
+                    // Hide form
+                    this.style.display = 'none';
+                    
+                    // Reset form after 5 seconds
+                    setTimeout(() => {
+                        successMessage.style.display = 'none';
+                        this.style.display = 'block';
+                        this.reset();
+                    }, 5000);
+                }
+                // If form has form_type, let PHP handle the submission
             });
         });
         
@@ -1357,6 +1365,14 @@ $page_title = "Contact FUS | Request B2B Access";
                 }
             });
         });
+
+        // Auto-dismiss alerts after 10 seconds
+        setTimeout(() => {
+            document.querySelectorAll('.alert').forEach(alert => {
+                const bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            });
+        }, 10000);
     </script>
 </body>
 </html>

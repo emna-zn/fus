@@ -1,0 +1,4 @@
+<FilesMatch "\.(jpg|jpeg|png|gif|webp)$">
+    Header set Cache-Control "max-age=31536000, public"
+    Allow from all
+</FilesMatch>
