@@ -951,7 +951,13 @@ $badge_classes = [
                 </button>
             <?php endif; ?>
             
+<<<<<<< HEAD
            
+=======
+            <a href="print_order.php?id=<?php echo $order['id']; ?>" class="btn btn-secondary" target="_blank">
+                <i class="fas fa-print me-2"></i>Imprimer le bon de commande
+            </a>
+>>>>>>> eb88bb074795731a4e423446ae0688689a615430
             
             <?php if ($order['status'] === 'shipped'): ?>
                 <button class="btn btn-primary" onclick="trackOrder(<?php echo $order['id']; ?>)">
